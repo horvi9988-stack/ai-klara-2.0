@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+"""CLI entrypoint for Klara AI tutoring flow."""
+
 from dataclasses import dataclass
 from pathlib import Path
 
