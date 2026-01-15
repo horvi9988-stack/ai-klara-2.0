@@ -9,7 +9,9 @@ from app.core.state_machine import TeacherEngine
 from app.storage.memory import add_lesson_record, load_memory, save_memory
 
 
-PROMPT_PATH = Path(__file__).resolve().parent / "prompts" / "klara.txt"
+APP_DIR = Path(__file__).resolve().parent
+PROMPT_PATH = APP_DIR / "prompts" / "klara.txt"
+MEMORY_PATH = APP_DIR / "storage" / "student_memory.json"
 
 
 @dataclass
@@ -23,7 +25,7 @@ class CliContext:
 
 def handle_command(context: CliContext, command: str) -> str:
     cmd = command.strip()
-
+    print("DEBUG_CMD:", repr(cmd))
     if cmd == "/start":
         context.engine.start_lesson()
         context.session.reset()
@@ -31,8 +33,9 @@ def handle_command(context: CliContext, command: str) -> str:
 
     if cmd == "/status":
         return (
-            f"state={context.engine.state} section={context.session.current_section} "
+            f"section={context.session.current_section} "
             f"strictness={context.engine.strictness} errors={context.engine.errors} "
+            f"strictness_peak={context.engine.strictness_peak} "
             f"topic={context.topic or 'unset'}"
         )
 
@@ -62,6 +65,7 @@ def handle_command(context: CliContext, command: str) -> str:
     if cmd == "/end":
         errors = context.engine.errors
         strictness_peak = context.engine.strictness_peak
+        section_reached = context.session.current_section
         message = context.engine.end_lesson()
 
         memory = load_memory(context.memory_path)
@@ -70,13 +74,24 @@ def handle_command(context: CliContext, command: str) -> str:
             errors=errors,
             strictness_peak=strictness_peak,
             topic=context.topic,
+            section_reached=section_reached,
         )
         save_memory(context.memory_path, memory)
 
         context.session.reset()
         return message
 
-    return "Neznamy prikaz. Pouzij /start, /topic <text>, /ok, /fail, /status, /end."
+    if cmd.startswith("/topic "):
+        context.topic = cmd.replace("/topic ", "", 1).strip() or None
+
+        memory = load_memory(context.memory_path)
+        memory.setdefault("preferences", {})
+        memory["preferences"]["topic"] = context.topic
+        save_memory(context.memory_path, memory)
+
+        return "Tema nastavene."
+
+
 def _respond(context: CliContext, state: str, user_text: str) -> str:
     topic_hint = context.topic or user_text
     return reply(
@@ -91,12 +106,12 @@ def run_cli() -> None:
     persona_text = ""
     if PROMPT_PATH.exists():
         persona_text = PROMPT_PATH.read_text(encoding="utf-8").strip()
-
     context = CliContext(
         engine=TeacherEngine(),
         session=LessonSession(),
-        memory_path=Path("student_memory.json"),
+        memory_path=MEMORY_PATH,
         persona_text=persona_text,
+        topic=topic,
     )
 
     # nacti ulozeny topic z pameti (persistuje po restartu)
