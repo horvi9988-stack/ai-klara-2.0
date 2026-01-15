@@ -30,8 +30,8 @@ def handle_command(context: CliContext, command: str) -> str:
     if cmd == "/status":
         return (
             f"state={context.engine.state} section={context.session.current_section} "
-        f"strictness={context.engine.strictness} errors={context.engine.errors} "
-        f"topic={context.topic or 'unset'}"
+            f"strictness={context.engine.strictness} errors={context.engine.errors} "
+            f"topic={context.topic or 'unset'}"
         )
     if cmd == "/ok":
         context.engine.evaluate(correct=True)
@@ -45,6 +45,7 @@ def handle_command(context: CliContext, command: str) -> str:
         errors = context.engine.errors
         strictness_peak = context.engine.strictness_peak
         message = context.engine.end_lesson()
+
         memory = load_memory(context.memory_path)
         add_lesson_record(
             memory,
@@ -53,17 +54,20 @@ def handle_command(context: CliContext, command: str) -> str:
             topic=context.topic,
         )
         save_memory(context.memory_path, memory)
+
         context.session.reset()
         return message
-   if cmd.startswith("/topic "):
-    context.topic = cmd.replace("/topic ", "", 1).strip() or None
 
-    memory = load_memory(context.memory_path)
-    memory.setdefault("preferences", {})
-    memory["preferences"]["topic"] = context.topic
-    save_memory(context.memory_path, memory)
+    return "Neznamy prikaz. Pouzij /start, /topic <text>, /ok, /fail, /status, /end."
+    if cmd.startswith("/topic "):
+        context.topic = cmd.replace("/topic ", "", 1).strip() or None
 
-    return "Tema nastavene."
+        memory = load_memory(context.memory_path)
+        memory.setdefault("preferences", {})
+        memory["preferences"]["topic"] = context.topic
+        save_memory(context.memory_path, memory)
+
+        return "Tema nastavene."
 
 
 def _respond(context: CliContext, state: str, user_text: str) -> str:
