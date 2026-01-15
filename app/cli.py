@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+"""CLI entrypoint for Klara AI tutoring flow."""
+
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -7,7 +9,11 @@ from app.core.evaluator import evaluate_answer
 from app.core.levels import normalize_level
 from app.core.mock_llm import reply
 <<<<<<< ours
+<<<<<<< ours
 from app.core.question_engine import generate_question
+=======
+from app.core.question_engine import Question, generate_question
+>>>>>>> theirs
 =======
 from app.core.question_engine import Question, generate_question
 >>>>>>> theirs
@@ -69,13 +75,19 @@ def handle_command(context: CliContext, command: str) -> str:
                 "/topic <text>",
                 "/ask",
 <<<<<<< ours
+<<<<<<< ours
                 "/quiz <n>",
 =======
+=======
+>>>>>>> theirs
                 "/answer <text> (alias /a)",
                 "/repeat",
                 "/next",
                 "/quiz <n>",
                 "/weak",
+<<<<<<< ours
+>>>>>>> theirs
+=======
 >>>>>>> theirs
                 "/status",
                 "/ok",
@@ -158,6 +170,7 @@ def handle_command(context: CliContext, command: str) -> str:
 
     if cmd == "/ask":
 <<<<<<< ours
+<<<<<<< ours
         question = generate_question(
             context.subject,
             context.level,
@@ -167,6 +180,8 @@ def handle_command(context: CliContext, command: str) -> str:
         context.session.questions_asked_count += 1
         return question
 =======
+=======
+>>>>>>> theirs
         return _ask_next_question(context)
 
     if cmd == "/next":
@@ -193,6 +208,9 @@ def handle_command(context: CliContext, command: str) -> str:
             for index, (topic, fail_rate, total) in enumerate(weakest)
         ]
         return "\n".join(lines)
+<<<<<<< ours
+>>>>>>> theirs
+=======
 >>>>>>> theirs
 
     if cmd.startswith("/quiz"):
@@ -203,6 +221,7 @@ def handle_command(context: CliContext, command: str) -> str:
                 count = max(1, int(parts[1].strip()))
             except ValueError:
                 return "Pouzij: /quiz <n>"
+<<<<<<< ours
 <<<<<<< ours
         questions = []
         for _ in range(count):
@@ -217,6 +236,8 @@ def handle_command(context: CliContext, command: str) -> str:
         context.session.questions_asked_count += count
         return "\n".join(f"{index + 1}. {question}" for index, question in enumerate(questions))
 =======
+=======
+>>>>>>> theirs
         questions: list[Question] = []
         for _ in range(count):
             questions.append(_generate_question(context))
@@ -228,6 +249,9 @@ def handle_command(context: CliContext, command: str) -> str:
         return "\n".join(
             f"{index + 1}. {question.text}" for index, question in enumerate(questions)
         )
+<<<<<<< ours
+>>>>>>> theirs
+=======
 >>>>>>> theirs
 
     if not cmd.startswith("/"):

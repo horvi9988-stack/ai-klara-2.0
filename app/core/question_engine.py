@@ -2,6 +2,10 @@ from __future__ import annotations
 
 import random
 <<<<<<< ours
+<<<<<<< ours
+=======
+from dataclasses import dataclass
+>>>>>>> theirs
 =======
 from dataclasses import dataclass
 >>>>>>> theirs
@@ -21,7 +25,11 @@ NEUTRAL_TONES = [
 
 STRICT_TONES = [
 <<<<<<< ours
+<<<<<<< ours
     "Soustreď se. Pracuj presne.",
+=======
+    "Soustred se. Pracuj presne.",
+>>>>>>> theirs
 =======
     "Soustred se. Pracuj presne.",
 >>>>>>> theirs
@@ -29,6 +37,7 @@ STRICT_TONES = [
     "Disciplina. Strucna odpoved.",
 ]
 
+<<<<<<< ours
 <<<<<<< ours
 SUBJECT_TEMPLATES: dict[str, dict[str, list[str]]] = {
     "dejepis": {
@@ -47,6 +56,8 @@ SUBJECT_TEMPLATES: dict[str, dict[str, list[str]]] = {
             "Jak bys obhajil vyznam {topic} v dlouhem obdobi?",
             "Srovnej interpretace {topic} z pohledu dvou skol.",
 =======
+=======
+>>>>>>> theirs
 
 TYPE_FACT = "TYPE_FACT"
 TYPE_EXPLAIN = "TYPE_EXPLAIN"
@@ -124,11 +135,15 @@ SUBJECT_TEMPLATES: dict[str, dict[str, list[Template]]] = {
                 "difficulty": "hard",
                 "type": TYPE_ANALYZE,
             },
+<<<<<<< ours
+>>>>>>> theirs
+=======
 >>>>>>> theirs
         ],
     },
     "matematika": {
         "zakladni": [
+<<<<<<< ours
 <<<<<<< ours
             "Vypocitej priklad k tematu {topic}.",
             "Uved jednoduche pravidlo pro {topic}.",
@@ -144,6 +159,8 @@ SUBJECT_TEMPLATES: dict[str, dict[str, list[Template]]] = {
             "Vysvetli dukaz tvrzeni pro {topic}.",
             "Aplikuj pokrocily postup na {topic}.",
 =======
+=======
+>>>>>>> theirs
             {
                 "id": "math_basic_1",
                 "text": "Spocitej 12 + 7 a popis postup.",
@@ -192,11 +209,15 @@ SUBJECT_TEMPLATES: dict[str, dict[str, list[Template]]] = {
                 "difficulty": "hard",
                 "type": TYPE_MATH,
             },
+<<<<<<< ours
+>>>>>>> theirs
+=======
 >>>>>>> theirs
         ],
     },
     "ekonomie": {
         "zakladni": [
+<<<<<<< ours
 <<<<<<< ours
             "Definuj pojem souvisejici s {topic}.",
             "Uved priklad z praxe k {topic}.",
@@ -212,6 +233,8 @@ SUBJECT_TEMPLATES: dict[str, dict[str, list[Template]]] = {
             "Srovnej dva pristupy k {topic}.",
             "Navrhni policy doporuceni pro {topic}.",
 =======
+=======
+>>>>>>> theirs
             {
                 "id": "econ_basic_1",
                 "text": "Definuj pojem souvisejici s {topic}.",
@@ -258,6 +281,9 @@ SUBJECT_TEMPLATES: dict[str, dict[str, list[Template]]] = {
                 "difficulty": "hard",
                 "type": TYPE_ANALYZE,
             },
+<<<<<<< ours
+>>>>>>> theirs
+=======
 >>>>>>> theirs
         ],
     },
@@ -265,10 +291,13 @@ SUBJECT_TEMPLATES: dict[str, dict[str, list[Template]]] = {
 
 DEFAULT_TEMPLATES = {
 <<<<<<< ours
+<<<<<<< ours
     "zakladni": ["Vysvetli zakladni pojem souvisejici s {topic}."],
     "stredni": ["Popis souvislosti u tematu {topic}."],
     "vysoka": ["Analyzuj tema {topic} do hloubky."],
 =======
+=======
+>>>>>>> theirs
     "zakladni": [
         {
             "id": "default_basic",
@@ -296,6 +325,9 @@ DEFAULT_TEMPLATES = {
             "type": TYPE_ANALYZE,
         }
     ],
+<<<<<<< ours
+>>>>>>> theirs
+=======
 >>>>>>> theirs
 }
 
@@ -306,7 +338,13 @@ def generate_question(
     topic: str | None,
     strictness: int,
 <<<<<<< ours
+<<<<<<< ours
 ) -> str:
+=======
+    *,
+    prefer_easy: bool = False,
+) -> Question:
+>>>>>>> theirs
 =======
     *,
     prefer_easy: bool = False,
@@ -317,6 +355,7 @@ def generate_question(
     topic_text = topic.strip() if topic else "tematu"
     templates = SUBJECT_TEMPLATES.get(normalized_subject, DEFAULT_TEMPLATES)
     choices = templates.get(normalized_level, DEFAULT_TEMPLATES[normalized_level])
+<<<<<<< ours
 <<<<<<< ours
     question = random.choice(choices).format(topic=topic_text)
 
@@ -331,6 +370,8 @@ def generate_question(
     step_2 = f"Krok 2: Zamer se na {topic_text}."
     return f"{tone} {step_1} {step_2} Otazka: {question}"
 =======
+=======
+>>>>>>> theirs
     if prefer_easy:
         easy_choices = [template for template in choices if template.get("difficulty") == "easy"]
         if easy_choices:
@@ -360,6 +401,9 @@ def generate_question(
     step_1 = "Krok 1: Ujasni si pojmy."
     step_2 = f"Krok 2: Zamer se na {topic_text}."
     return Question(text=f"{tone} {step_1} {step_2} Otazka: {text}", meta=meta)
+<<<<<<< ours
+>>>>>>> theirs
+=======
 >>>>>>> theirs
 
 
@@ -368,11 +412,17 @@ def _normalize_level(level: str | None) -> str:
         return level
     return "zakladni"
 <<<<<<< ours
+<<<<<<< ours
 =======
+=======
+>>>>>>> theirs
 
 
 def _coerce_expected_answer(value: object) -> float | None:
     if isinstance(value, (int, float)):
         return float(value)
     return None
+<<<<<<< ours
+>>>>>>> theirs
+=======
 >>>>>>> theirs

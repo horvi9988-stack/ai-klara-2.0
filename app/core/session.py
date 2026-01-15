@@ -24,12 +24,18 @@ class LessonSession:
     index: int = 0
     questions_asked_count: int = 0
 <<<<<<< ours
+<<<<<<< ours
 =======
+=======
+>>>>>>> theirs
     last_question: str | None = None
     last_question_meta: QuestionMeta | None = None
     last_answer: str | None = None
     ok_count: int = 0
     fail_count: int = 0
+<<<<<<< ours
+>>>>>>> theirs
+=======
 >>>>>>> theirs
 
     @property
@@ -49,10 +55,16 @@ class LessonSession:
         self.index = 0
         self.questions_asked_count = 0
 <<<<<<< ours
+<<<<<<< ours
 =======
+=======
+>>>>>>> theirs
         self.last_question = None
         self.last_question_meta = None
         self.last_answer = None
         self.ok_count = 0
         self.fail_count = 0
+<<<<<<< ours
+>>>>>>> theirs
+=======
 >>>>>>> theirs
