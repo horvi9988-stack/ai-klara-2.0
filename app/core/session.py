@@ -20,6 +20,7 @@ SECTION_ACTIONS = {
 class LessonSession:
     sections: list[str] = field(default_factory=lambda: SECTIONS.copy())
     index: int = 0
+    questions_asked_count: int = 0
 
     @property
     def current_section(self) -> str:
@@ -36,3 +37,4 @@ class LessonSession:
 
     def reset(self) -> None:
         self.index = 0
+        self.questions_asked_count = 0

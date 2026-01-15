@@ -17,6 +17,14 @@ LEVEL_ALIASES = {
     "master": "magisterska",
 }
 
+LEVEL_NUMERIC_MAP = {
+    "1": "zakladni",
+    "2": "zakladni",
+    "3": "stredni",
+    "4": "vysoka",
+    "5": "vysoka",
+}
+
 
 def normalize_level(text: str | None) -> str | None:
     if not text:
@@ -26,4 +34,6 @@ def normalize_level(text: str | None) -> str | None:
         return None
     if cleaned in LEVELS:
         return cleaned
+    if cleaned in LEVEL_NUMERIC_MAP:
+        return LEVEL_NUMERIC_MAP[cleaned]
     return LEVEL_ALIASES.get(cleaned)
