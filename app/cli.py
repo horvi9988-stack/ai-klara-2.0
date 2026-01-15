@@ -30,7 +30,8 @@ def handle_command(context: CliContext, command: str) -> str:
     if cmd == "/status":
         return (
             f"state={context.engine.state} section={context.session.current_section} "
-            f"strictness={context.engine.strictness} errors={context.engine.errors}"
+        f"strictness={context.engine.strictness} errors={context.engine.errors} "
+        f"topic={context.topic or 'unset'}"
         )
     if cmd == "/ok":
         context.engine.evaluate(correct=True)
@@ -54,10 +55,15 @@ def handle_command(context: CliContext, command: str) -> str:
         save_memory(context.memory_path, memory)
         context.session.reset()
         return message
-    if cmd.startswith("/topic "):
-        context.topic = cmd.replace("/topic ", "", 1).strip() or None
-        return "Tema nastavene."
-    return "Neznamy prikaz. Pouzij /start, /ok, /fail, /status, /end."
+   if cmd.startswith("/topic "):
+    context.topic = cmd.replace("/topic ", "", 1).strip() or None
+
+    memory = load_memory(context.memory_path)
+    memory.setdefault("preferences", {})
+    memory["preferences"]["topic"] = context.topic
+    save_memory(context.memory_path, memory)
+
+    return "Tema nastavene."
 
 
 def _respond(context: CliContext, state: str, user_text: str) -> str:
