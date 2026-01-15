@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from app.core.question_engine import QuestionMeta
+
 
 SECTIONS = ["INTRO", "EXPLAIN", "PRACTICE", "TEST", "RECAP", "END"]
 
@@ -20,6 +22,12 @@ SECTION_ACTIONS = {
 class LessonSession:
     sections: list[str] = field(default_factory=lambda: SECTIONS.copy())
     index: int = 0
+    questions_asked_count: int = 0
+    last_question: str | None = None
+    last_question_meta: QuestionMeta | None = None
+    last_answer: str | None = None
+    ok_count: int = 0
+    fail_count: int = 0
 
     @property
     def current_section(self) -> str:
@@ -36,3 +44,9 @@ class LessonSession:
 
     def reset(self) -> None:
         self.index = 0
+        self.questions_asked_count = 0
+        self.last_question = None
+        self.last_question_meta = None
+        self.last_answer = None
+        self.ok_count = 0
+        self.fail_count = 0
