@@ -1,0 +1,23 @@
+import tempfile
+import unittest
+from pathlib import Path
+
+from app.storage.memory import StudentMemory, load_memory, save_memory
+
+
+class MemoryPersistenceTests(unittest.TestCase):
+    def test_preferences_roundtrip(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            path = Path(tmp_dir) / "memory.json"
+            memory = StudentMemory(
+                preferences={"subject": "dejepis", "level": "vysoka", "topic": "stredovek"}
+            )
+            save_memory(path, memory)
+            loaded = load_memory(path)
+            self.assertEqual(loaded.preferences.get("subject"), "dejepis")
+            self.assertEqual(loaded.preferences.get("level"), "vysoka")
+            self.assertEqual(loaded.preferences.get("topic"), "stredovek")
+
+
+if __name__ == "__main__":
+    unittest.main()

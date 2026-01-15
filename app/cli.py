@@ -3,7 +3,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
+from app.core.levels import normalize_level
 from app.core.mock_llm import reply
+from app.core.subjects import normalize_subject
 from app.core.session import LessonSession
 from app.core.state_machine import TeacherEngine
 from app.storage.memory import add_lesson_record, load_memory, save_memory
@@ -21,11 +23,12 @@ class CliContext:
     memory_path: Path
     persona_text: str
     topic: str | None = None
+    subject: str | None = None
+    level: str | None = None
 
 
 def handle_command(context: CliContext, command: str) -> str:
     cmd = command.strip()
-    print("DEBUG_CMD:", repr(cmd))
     if cmd == "/start":
         context.engine.start_lesson()
         context.session.reset()
@@ -36,7 +39,23 @@ def handle_command(context: CliContext, command: str) -> str:
             f"section={context.session.current_section} "
             f"strictness={context.engine.strictness} errors={context.engine.errors} "
             f"strictness_peak={context.engine.strictness_peak} "
+            f"subject={context.subject or 'unset'} "
+            f"level={context.level or 'unset'} "
             f"topic={context.topic or 'unset'}"
+        )
+
+    if cmd == "/help":
+        return "\n".join(
+            [
+                "/start",
+                "/subject <name> (alias /s)",
+                "/level <name> (alias /lvl)",
+                "/topic <text>",
+                "/status",
+                "/ok",
+                "/fail",
+                "/end",
+            ]
         )
 
     if cmd == "/topic":
@@ -46,11 +65,38 @@ def handle_command(context: CliContext, command: str) -> str:
         context.topic = cmd.replace("/topic ", "", 1).strip() or None
 
         memory = load_memory(context.memory_path)
-        memory.setdefault("preferences", {})
-        memory["preferences"]["topic"] = context.topic
+        memory.preferences["topic"] = context.topic
         save_memory(context.memory_path, memory)
 
         return f"Tema nastavene: {context.topic or 'unset'}"
+
+    if cmd == "/subject":
+        return "Pouzij: /subject <name>"
+
+    if cmd.startswith("/subject ") or cmd.startswith("/s "):
+        raw = cmd.replace("/subject ", "", 1).replace("/s ", "", 1).strip()
+        subject = normalize_subject(raw)
+        if not subject:
+            return "Neznamy predmet."
+        context.subject = subject
+        memory = load_memory(context.memory_path)
+        memory.preferences["subject"] = subject
+        save_memory(context.memory_path, memory)
+        return f"Predmet nastaven: {subject}"
+
+    if cmd == "/level":
+        return "Pouzij: /level <name>"
+
+    if cmd.startswith("/level ") or cmd.startswith("/lvl "):
+        raw = cmd.replace("/level ", "", 1).replace("/lvl ", "", 1).strip()
+        level = normalize_level(raw)
+        if not level:
+            return "Neznama uroven."
+        context.level = level
+        memory = load_memory(context.memory_path)
+        memory.preferences["level"] = level
+        save_memory(context.memory_path, memory)
+        return f"Uroven nastavena: {level}"
 
     if cmd == "/ok":
         context.engine.evaluate(correct=True)
@@ -81,15 +127,17 @@ def handle_command(context: CliContext, command: str) -> str:
         context.session.reset()
         return message
 
-    if cmd.startswith("/topic "):
-        context.topic = cmd.replace("/topic ", "", 1).strip() or None
+    if not cmd.startswith("/"):
+        subject = normalize_subject(cmd)
+        if subject:
+            context.subject = subject
+            memory = load_memory(context.memory_path)
+            memory.preferences["subject"] = subject
+            save_memory(context.memory_path, memory)
+            return f"Predmet nastaven: {subject}"
+        return _respond(context, context.session.current_section, cmd)
 
-        memory = load_memory(context.memory_path)
-        memory.setdefault("preferences", {})
-        memory["preferences"]["topic"] = context.topic
-        save_memory(context.memory_path, memory)
-
-        return "Tema nastavene."
+    return "Neznamy prikaz. Pouzij /help."
 
 
 def _respond(context: CliContext, state: str, user_text: str) -> str:
@@ -99,6 +147,8 @@ def _respond(context: CliContext, state: str, user_text: str) -> str:
         context.engine.strictness,
         state,
         topic_hint,
+        subject=context.subject,
+        level=context.level,
     )
 
 
@@ -106,22 +156,25 @@ def run_cli() -> None:
     persona_text = ""
     if PROMPT_PATH.exists():
         persona_text = PROMPT_PATH.read_text(encoding="utf-8").strip()
+    memory = load_memory(MEMORY_PATH)
+    prefs = memory.preferences if isinstance(memory.preferences, dict) else {}
+    saved_topic = prefs.get("topic")
+    saved_subject = prefs.get("subject")
+    saved_level = prefs.get("level")
     context = CliContext(
         engine=TeacherEngine(),
         session=LessonSession(),
         memory_path=MEMORY_PATH,
         persona_text=persona_text,
-        topic=topic,
+        topic=saved_topic if saved_topic else None,
+        subject=saved_subject if saved_subject else None,
+        level=saved_level if saved_level else None,
     )
 
     # nacti ulozeny topic z pameti (persistuje po restartu)
-    memory = load_memory(context.memory_path)
-    prefs = memory.get("preferences", {}) if isinstance(memory, dict) else {}
-    saved_topic = prefs.get("topic")
-    context.topic = saved_topic if saved_topic else None
-
     print("Klara CLI. Zadej prikaz.")
-    print("Tip: /start  |  /topic <text>  |  /status  |  /ok  |  /fail  |  /end")
+    print("Type /start")
+    print("Type /help")
 
     while True:
         try:
@@ -137,4 +190,3 @@ def run_cli() -> None:
 
         if user_input == "/end":
             break
-
