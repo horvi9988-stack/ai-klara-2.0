@@ -3,69 +3,58 @@ from __future__ import annotations
 from app.core.session import LessonSection
 
 
-SECTION_PROMPTS = {
-    LessonSection.INTRO: "Today we set the goal and focus the topic.",
-    LessonSection.EXPLAIN: "I will explain the key idea clearly.",
-    LessonSection.PRACTICE: "Now we practice together with guidance.",
-    LessonSection.TEST: "Show me you can apply it on your own.",
-    LessonSection.RECAP: "We summarize the main points and fix gaps.",
-    LessonSection.END: "We close the lesson with confidence.",
+SECTION_LINES = {
+    LessonSection.INTRO: "Dnes si nastavime cil a smer lekce.",
+    LessonSection.EXPLAIN: "Vysvetlim ti klicovou myslenku jasne a klidne.",
+    LessonSection.PRACTICE: "Procivicime to spolu na prikladu.",
+    LessonSection.TEST: "Ted to zkus samostatne.",
+    LessonSection.RECAP: "Shrneme hlavni body a opravime mezery.",
+    LessonSection.END: "Lekci uzavreme s jistotou.",
 }
 
 SECTION_QUESTIONS = {
-    LessonSection.INTRO: "What do you want to achieve today?",
-    LessonSection.EXPLAIN: "What is the main idea in your own words?",
-    LessonSection.PRACTICE: "Can you try one example now?",
-    LessonSection.TEST: "What is your final answer?",
-    LessonSection.RECAP: "What is one key point you will remember?",
-    LessonSection.END: "Are you ready to close the lesson?",
+    LessonSection.INTRO: "Jaky cil dnes chces dosahnout?",
+    LessonSection.EXPLAIN: "Rekni mi hlavni myslenku vlastnimi slovy?",
+    LessonSection.PRACTICE: "Zkusis jeden kratky priklad?",
+    LessonSection.TEST: "Jaka je tva konecna odpoved?",
+    LessonSection.RECAP: "Jaky je jeden bod, ktery si zapamatujes?",
+    LessonSection.END: "Jsi pripravena uzavrit lekci?",
 }
 
 
-def _supportive_line() -> str:
-    return "Good work so far. I see your effort, and I will guide you."
+def _supportive_tone() -> list[str]:
+    return [
+        "Dobra prace. Vidim snahu a povedu te.",
+        "Zadna drama, i moje krida se obcas splete.",
+    ]
 
 
-def _light_humor() -> str:
-    return "No drama, we fix it together. Even my chalk makes mistakes."
+def _neutral_tone() -> list[str]:
+    return ["Pojdme strukturovane krok za krokem."]
 
 
-def _neutral_line() -> str:
-    return "We will proceed step by step with a clear structure."
-
-
-def _strict_line() -> str:
-    return "Focus. Short answers. One step at a time."
+def _strict_tone(state: LessonSection) -> list[str]:
+    return [
+        "Prisny rezim.",
+        f"Sekce {state.value}.",
+        "Krok 1: Pojmenuj klicovou myslenku.",
+        "Krok 2: Dej jeden kratky priklad.",
+    ]
 
 
 def reply(persona_text: str, strictness: int, state: LessonSection, user_text: str) -> str:
-    section_line = SECTION_PROMPTS.get(state, "We continue the lesson.")
-    question = SECTION_QUESTIONS.get(state, "What is your next step?")
+    section_line = SECTION_LINES.get(state, "Pokracujeme v lekci.")
+    question = SECTION_QUESTIONS.get(state, "Co udelas jako dalsi krok?")
 
     if strictness <= 2:
-        tone = _supportive_line() + _light_humor()
-        parts = [
-            persona_text.strip(),
-            tone.strip(),
-            section_line.strip(),
-        ]
+        parts = [persona_text.strip(), section_line] + _supportive_tone()
     elif strictness == 3:
-        tone = _neutral_line()
-        parts = [
-            persona_text.strip(),
-            tone.strip(),
-            section_line.strip(),
-        ]
+        parts = [persona_text.strip(), section_line] + _neutral_tone()
     else:
-        parts = [
-            persona_text.strip(),
-            _strict_line().strip(),
-            "Step 1: Name the key idea.",
-            "Step 2: Give one short example.",
-        ]
+        parts = [persona_text.strip()] + _strict_tone(state)
 
     if user_text:
-        parts.append(f"I heard: {user_text.strip()}.")
+        parts.append(f"Tema: {user_text.strip()}.")
     parts.append(question.strip())
 
     response = " ".join(part for part in parts if part)

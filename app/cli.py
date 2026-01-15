@@ -34,6 +34,7 @@ def _status_line(engine: TeacherEngine, topic: str) -> str:
         f"section={engine.state.value} "
         f"strictness={engine.strictness} "
         f"errors={engine.errors} "
+        f"strictness_peak={engine.strictness_peak} "
         f"topic={topic or 'unset'}"
     )
 
