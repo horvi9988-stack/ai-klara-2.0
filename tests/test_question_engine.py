@@ -6,8 +6,14 @@ from app.core.question_engine import generate_question
 class QuestionEngineTests(unittest.TestCase):
     def test_generate_question_contains_topic(self) -> None:
         question = generate_question("dejepis", "stredni", "1. svetova valka", 3)
+<<<<<<< ours
         self.assertIsInstance(question, str)
         self.assertIn("1. svetova valka", question)
+=======
+        self.assertIsInstance(question.text, str)
+        self.assertIn("1. svetova valka", question.text)
+        self.assertEqual(question.meta.topic, "1. svetova valka")
+>>>>>>> theirs
 
 
 if __name__ == "__main__":
