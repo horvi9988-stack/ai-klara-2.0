@@ -21,10 +21,9 @@ class CliContext:
     topic: str | None = None
 
 
-ddef handle_command(context: CliContext, command: str) -> str:
+def handle_command(context: CliContext, command: str) -> str:
     cmd = command.strip()
     print("DEBUG_CMD:", repr(cmd))
-    ...
     if cmd == "/start":
         context.engine.start_lesson()
         context.session.reset()
@@ -58,9 +57,8 @@ ddef handle_command(context: CliContext, command: str) -> str:
         save_memory(context.memory_path, memory)
 
         context.session.reset()
-        return "Neznamy prikaz. Pouzij /start, /topic <text>, /ok, /fail, /status, /end."
+        return message
 
-    return 
     if cmd.startswith("/topic "):
         context.topic = cmd.replace("/topic ", "", 1).strip() or None
 
