@@ -25,8 +25,23 @@ def load_memory(path: Path) -> StudentMemory:
     if not path.exists():
         return StudentMemory()
     data = json.loads(path.read_text(encoding="utf-8"))
-    history = [LessonRecord(**item) for item in data.get("lesson_history", [])]
+    if not isinstance(data, dict):
+        return StudentMemory()
+    history_data = data.get("lesson_history", [])
+    history: list[LessonRecord] = []
+    if isinstance(history_data, list):
+        for item in history_data:
+            record = _coerce_record(item)
+            if record:
+                history.append(record)
     preferences = data.get("preferences", {})
+    if not isinstance(preferences, dict):
+        preferences = {}
+    preferences = {
+        "subject": preferences.get("subject"),
+        "level": preferences.get("level"),
+        "topic": preferences.get("topic"),
+    }
     return StudentMemory(lesson_history=history, preferences=preferences)
 
 
@@ -55,4 +70,23 @@ def add_lesson_record(
             topic=topic,
             section_reached=section_reached,
         )
+    )
+
+
+def _coerce_record(item: object) -> LessonRecord | None:
+    if not isinstance(item, dict):
+        return None
+    timestamp = item.get("timestamp")
+    if not isinstance(timestamp, str) or not timestamp:
+        timestamp = datetime.now(timezone.utc).isoformat()
+    errors = item.get("errors", 0)
+    strictness_peak = item.get("strictness_peak", 1)
+    topic = item.get("topic")
+    section_reached = item.get("section_reached")
+    return LessonRecord(
+        timestamp=timestamp,
+        errors=errors if isinstance(errors, int) else 0,
+        strictness_peak=strictness_peak if isinstance(strictness_peak, int) else 1,
+        topic=topic if isinstance(topic, str) or topic is None else None,
+        section_reached=section_reached if isinstance(section_reached, str) or section_reached is None else None,
     )
