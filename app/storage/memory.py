@@ -19,6 +19,10 @@ class LessonRecord:
 class StudentMemory:
     lesson_history: list[LessonRecord] = field(default_factory=list)
     preferences: dict[str, str | None] = field(default_factory=dict)
+    data: dict[str, dict[str, str | None]] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        self.data["preferences"] = self.preferences
 
 
 def load_memory(path: Path) -> StudentMemory:
@@ -30,11 +34,14 @@ def load_memory(path: Path) -> StudentMemory:
     return StudentMemory(lesson_history=history, preferences=preferences)
 
 
-def save_memory(path: Path, memory: StudentMemory) -> None:
-    payload = {
-        "lesson_history": [record.__dict__ for record in memory.lesson_history],
-        "preferences": memory.preferences,
-    }
+def save_memory(path: Path, memory: StudentMemory | dict) -> None:
+    if isinstance(memory, StudentMemory):
+        payload = {
+            "lesson_history": [record.__dict__ for record in memory.lesson_history],
+            "preferences": memory.preferences,
+        }
+    else:
+        payload = memory
     path.write_text(json.dumps(payload, ensure_ascii=True, indent=2), encoding="utf-8")
 
 

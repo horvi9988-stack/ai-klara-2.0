@@ -69,12 +69,17 @@ def handle_command(context: CliContext, command: str) -> str:
 
     if cmd.startswith("/topic"):
         parts = cmd.split(maxsplit=1)
-        context.topic = parts[1].strip() if len(parts) > 1 else None
-        if context.topic == "":
-            context.topic = None
+        if len(parts) < 2 or not parts[1].strip():
+            return "Pouzij: /topic <text>"
+        context.topic = parts[1].strip()
 
         memory = load_memory(context.memory_path)
-        memory.preferences["topic"] = context.topic
+        if hasattr(memory, "data"):
+            memory.data.setdefault("preferences", {})
+            memory.data["preferences"]["topic"] = context.topic
+        else:
+            memory.setdefault("preferences", {})
+            memory["preferences"]["topic"] = context.topic
         save_memory(context.memory_path, memory)
 
         return "Tema nastavene."
@@ -99,12 +104,16 @@ def run_cli() -> None:
     if not MEMORY_PATH.parent.exists():
         MEMORY_PATH.parent.mkdir(parents=True, exist_ok=True)
     memory = load_memory(MEMORY_PATH)
+    if hasattr(memory, "data"):
+        topic = memory.data.get("preferences", {}).get("topic")
+    else:
+        topic = memory.get("preferences", {}).get("topic")
     context = CliContext(
         engine=TeacherEngine(),
         session=LessonSession(),
         memory_path=MEMORY_PATH,
         persona_text=persona_text,
-        topic=memory.preferences.get("topic"),
+        topic=topic,
     )
     print("Klara CLI. Zadej prikaz.")
     while True:
