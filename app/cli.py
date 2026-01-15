@@ -5,6 +5,7 @@ from pathlib import Path
 
 from app.core.levels import normalize_level
 from app.core.mock_llm import reply
+from app.core.question_engine import generate_question
 from app.core.subjects import normalize_subject
 from app.core.session import LessonSession
 from app.core.state_machine import TeacherEngine
@@ -36,9 +37,9 @@ def handle_command(context: CliContext, command: str) -> str:
 
     if cmd == "/status":
         return (
+            f"state={context.engine.state} "
             f"section={context.session.current_section} "
             f"strictness={context.engine.strictness} errors={context.engine.errors} "
-            f"strictness_peak={context.engine.strictness_peak} "
             f"subject={context.subject or 'unset'} "
             f"level={context.level or 'unset'} "
             f"topic={context.topic or 'unset'}"
@@ -51,6 +52,8 @@ def handle_command(context: CliContext, command: str) -> str:
                 "/subject <name> (alias /s)",
                 "/level <name> (alias /lvl)",
                 "/topic <text>",
+                "/ask",
+                "/quiz <n>",
                 "/status",
                 "/ok",
                 "/fail",
@@ -120,12 +123,46 @@ def handle_command(context: CliContext, command: str) -> str:
             errors=errors,
             strictness_peak=strictness_peak,
             topic=context.topic,
+            subject=context.subject,
+            level=context.level,
+            questions_asked_count=context.session.questions_asked_count,
             section_reached=section_reached,
         )
         save_memory(context.memory_path, memory)
 
         context.session.reset()
         return message
+
+    if cmd == "/ask":
+        question = generate_question(
+            context.subject,
+            context.level,
+            context.topic,
+            context.engine.strictness,
+        )
+        context.session.questions_asked_count += 1
+        return question
+
+    if cmd.startswith("/quiz"):
+        parts = cmd.split(maxsplit=1)
+        count = 5
+        if len(parts) == 2 and parts[1].strip():
+            try:
+                count = max(1, int(parts[1].strip()))
+            except ValueError:
+                return "Pouzij: /quiz <n>"
+        questions = []
+        for _ in range(count):
+            questions.append(
+                generate_question(
+                    context.subject,
+                    context.level,
+                    context.topic,
+                    context.engine.strictness,
+                )
+            )
+        context.session.questions_asked_count += count
+        return "\n".join(f"{index + 1}. {question}" for index, question in enumerate(questions))
 
     if not cmd.startswith("/"):
         subject = normalize_subject(cmd)

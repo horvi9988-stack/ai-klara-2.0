@@ -12,6 +12,9 @@ class LessonRecord:
     errors: int
     strictness_peak: int
     topic: str | None = None
+    subject: str | None = None
+    level: str | None = None
+    questions_asked_count: int = 0
     section_reached: str | None = None
 
 
@@ -59,6 +62,9 @@ def add_lesson_record(
     errors: int,
     strictness_peak: int,
     topic: str | None = None,
+    subject: str | None = None,
+    level: str | None = None,
+    questions_asked_count: int = 0,
     section_reached: str | None = None,
 ) -> None:
     timestamp = datetime.now(timezone.utc).isoformat()
@@ -68,6 +74,9 @@ def add_lesson_record(
             errors=errors,
             strictness_peak=strictness_peak,
             topic=topic,
+            subject=subject,
+            level=level,
+            questions_asked_count=questions_asked_count,
             section_reached=section_reached,
         )
     )
@@ -82,11 +91,17 @@ def _coerce_record(item: object) -> LessonRecord | None:
     errors = item.get("errors", 0)
     strictness_peak = item.get("strictness_peak", 1)
     topic = item.get("topic")
+    subject = item.get("subject")
+    level = item.get("level")
+    questions_asked_count = item.get("questions_asked_count", 0)
     section_reached = item.get("section_reached")
     return LessonRecord(
         timestamp=timestamp,
         errors=errors if isinstance(errors, int) else 0,
         strictness_peak=strictness_peak if isinstance(strictness_peak, int) else 1,
         topic=topic if isinstance(topic, str) or topic is None else None,
+        subject=subject if isinstance(subject, str) or subject is None else None,
+        level=level if isinstance(level, str) or level is None else None,
+        questions_asked_count=questions_asked_count if isinstance(questions_asked_count, int) else 0,
         section_reached=section_reached if isinstance(section_reached, str) or section_reached is None else None,
     )
