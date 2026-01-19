@@ -1,7 +1,9 @@
+"""Optional voice input/output utilities."""
 from __future__ import annotations
 
 import importlib
 import importlib.util
+from typing import Any
 
 DEFAULT_SAMPLE_RATE = 16000
 DEFAULT_RECORD_SECONDS = 5
@@ -62,7 +64,7 @@ def _missing_voice_deps() -> list[str]:
     return missing
 
 
-def _record_audio(*, seconds: int, sample_rate: int):
+def _record_audio(*, seconds: int, sample_rate: int) -> tuple[Any, int]:
     sounddevice = importlib.import_module("sounddevice")
     numpy = importlib.import_module("numpy")
     frames = int(seconds * sample_rate)
@@ -71,7 +73,7 @@ def _record_audio(*, seconds: int, sample_rate: int):
     return numpy.squeeze(audio), sample_rate
 
 
-def _transcribe_audio(audio, *, sample_rate: int) -> str:
+def _transcribe_audio(audio: Any, *, sample_rate: int) -> str:
     faster_whisper = importlib.import_module("faster_whisper")
     model = faster_whisper.WhisperModel("base", device="cpu", compute_type="int8")
     segments, _info = model.transcribe(audio, beam_size=5, sample_rate=sample_rate)

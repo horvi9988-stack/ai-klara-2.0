@@ -1,3 +1,4 @@
+"""LLM question generation with optional source context."""
 from __future__ import annotations
 
 from app.core.local_sources import SourceChunk, retrieve_chunks

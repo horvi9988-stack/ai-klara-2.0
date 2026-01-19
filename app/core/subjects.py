@@ -1,6 +1,7 @@
+"""Subject normalization helpers."""
 from __future__ import annotations
 
-SUBJECTS = {
+SUBJECTS: set[str] = {
     "dejepis",
     "matematika",
     "ekonomie",
@@ -8,7 +9,7 @@ SUBJECTS = {
     "programovani",
 }
 
-SUBJECT_ALIASES = {
+SUBJECT_ALIASES: dict[str, str] = {
     "history": "dejepis",
     "math": "matematika",
     "ekonomika": "ekonomie",

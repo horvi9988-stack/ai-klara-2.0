@@ -1,9 +1,11 @@
+"""Persistent student memory storage."""
 from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 
 
 @dataclass
@@ -139,7 +141,7 @@ def get_weakest_topics(memory: StudentMemory, *, subject: str, limit: int) -> li
     return scored[:limit]
 
 
-def _coerce_record(item: object) -> LessonRecord | None:
+def _coerce_record(item: Any) -> LessonRecord | None:
     if not isinstance(item, dict):
         return None
     timestamp = item.get("timestamp")
