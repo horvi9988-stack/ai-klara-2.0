@@ -12,6 +12,13 @@ from app.core.question_engine import Question, generate_question
 from app.core.subjects import normalize_subject
 from app.core.session import LessonSession
 from app.core.state_machine import TeacherEngine
+from app.core.teachers import (
+    DEFAULT_TEACHER_ID,
+    TeacherProfile,
+    get_teacher_by_id,
+    is_teacher_id,
+    list_teachers,
+)
 from app.storage.memory import (
     add_lesson_record,
     get_topic_stats,
@@ -33,6 +40,7 @@ class CliContext:
     session: LessonSession
     memory_path: Path
     persona_text: str
+    teacher: TeacherProfile
     topic: str | None = None
     subject: str | None = None
     level: str | None = None
@@ -52,6 +60,7 @@ def handle_command(context: CliContext, command: str) -> str:
             f"state={context.engine.state} "
             f"section={context.session.current_section} "
             f"strictness={context.engine.strictness} errors={context.engine.errors} "
+            f"teacher={context.teacher.id} "
             f"subject={context.subject or 'unset'} "
             f"level={context.level or 'unset'} "
             f"topic={context.topic or 'unset'} "
@@ -65,6 +74,9 @@ def handle_command(context: CliContext, command: str) -> str:
                 "/subject <name> (alias /s)",
                 "/level <name> (alias /lvl)",
                 "/topic <text>",
+                "/teachers",
+                "/teacher <id>",
+                "/plan",
                 "/ask",
                 "/answer <text> (alias /a)",
                 "/repeat",
@@ -77,6 +89,32 @@ def handle_command(context: CliContext, command: str) -> str:
                 "/end",
             ]
         )
+
+    if cmd == "/teachers":
+        lines = [
+            f"{teacher.id} - {teacher.display_name}: {teacher.description}"
+            for teacher in list_teachers()
+        ]
+        return "\n".join(lines)
+
+    if cmd == "/teacher":
+        return "Pouzij: /teacher <id>"
+
+    if cmd.startswith("/teacher "):
+        raw = cmd.replace("/teacher ", "", 1).strip()
+        if not is_teacher_id(raw):
+            return "Neznamy ucitel."
+        teacher = get_teacher_by_id(raw)
+        context.teacher = teacher
+        context.persona_text = teacher.persona_text
+        memory = load_memory(context.memory_path)
+        memory.preferences["teacher_id"] = teacher.id
+        save_memory(context.memory_path, memory)
+        return f"Ucitele vybran: {teacher.display_name}"
+
+    if cmd == "/plan":
+        plan = " -> ".join(f"{section}(10m)" for section in context.session.sections)
+        return f"Plan: {plan} | current={context.session.current_section}"
 
     if cmd == "/topic":
         return "Pouzij: /topic <text>"
@@ -125,8 +163,7 @@ def handle_command(context: CliContext, command: str) -> str:
 
     if cmd == "/fail":
         context.engine.evaluate(correct=False)
-        section = "STRICT_MODE" if context.engine.state == "STRICT_MODE" else context.session.current_section
-        return _respond(context, section, "")
+        return _respond(context, context.session.current_section, "")
 
     if cmd == "/end":
         errors = context.engine.errors
@@ -238,8 +275,11 @@ def _generate_question(context: CliContext) -> Question:
         context.subject,
         context.level,
         context.topic,
+        context.session.current_section,
         context.engine.strictness,
         prefer_easy=prefer_easy,
+        persona_text=context.teacher.persona_text,
+        strict_mode_style=context.teacher.strict_mode_style,
     )
 
 
@@ -326,11 +366,14 @@ def run_cli() -> None:
     saved_topic = prefs.get("topic")
     saved_subject = prefs.get("subject")
     saved_level = prefs.get("level")
+    saved_teacher_id = prefs.get("teacher_id") or DEFAULT_TEACHER_ID
+    teacher = get_teacher_by_id(saved_teacher_id)
     context = CliContext(
         engine=TeacherEngine(),
         session=LessonSession(),
         memory_path=MEMORY_PATH,
-        persona_text=persona_text,
+        persona_text=teacher.persona_text or persona_text,
+        teacher=teacher,
         topic=saved_topic if saved_topic else None,
         subject=saved_subject if saved_subject else None,
         level=saved_level if saved_level else None,

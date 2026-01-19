@@ -159,4 +159,4 @@ def _persona_hint(persona_text: str) -> str:
     cleaned = persona_text.strip()
     if not cleaned:
         return ""
-    return "Jsem Klara."
+    return cleaned

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import random
 from dataclasses import dataclass
 
 SUPPORTIVE_TONES = [
@@ -238,21 +237,36 @@ def generate_question(
     subject: str | None,
     level: str | None,
     topic: str | None,
+    section: str | None,
     strictness: int,
     *,
     prefer_easy: bool = False,
+    persona_text: str = "",
+    strict_mode_style: str = "",
 ) -> Question:
     normalized_subject = subject or "obecne"
     normalized_level = _normalize_level(level)
     topic_text = topic.strip() if topic else "tematu"
+    section_label = section or "INTRO"
     templates = SUBJECT_TEMPLATES.get(normalized_subject, DEFAULT_TEMPLATES)
     choices = templates.get(normalized_level, DEFAULT_TEMPLATES[normalized_level])
 
+    choices = _apply_section_focus(choices, section_label)
     if prefer_easy:
         easy_choices = [template for template in choices if template.get("difficulty") == "easy"]
         if easy_choices:
             choices = easy_choices
-    selected = random.choice(choices)
+    selected = _stable_choice(
+        choices,
+        seed_parts=[
+            normalized_subject,
+            normalized_level,
+            topic_text,
+            section_label,
+            str(strictness),
+            persona_text,
+        ],
+    )
 
     text = str(selected["text"]).format(topic=topic_text)
     keywords = [str(keyword).format(topic=topic_text) for keyword in selected.get("keywords", [])]
@@ -267,16 +281,20 @@ def generate_question(
         expected_answer=_coerce_expected_answer(selected.get("expected_answer")),
     )
 
+    teacher_style = _teacher_style(strictness, persona_text, strict_mode_style)
     if strictness <= 2:
-        tone = random.choice(SUPPORTIVE_TONES)
-        return Question(text=f"{tone} {text}", meta=meta)
+        tone = _stable_tone(SUPPORTIVE_TONES, topic_text, section_label, strictness)
+        return Question(text=_join_parts([tone, teacher_style, text]), meta=meta)
     if strictness == 3:
-        tone = random.choice(NEUTRAL_TONES)
-        return Question(text=f"{tone} Otazka: {text}", meta=meta)
-    tone = random.choice(STRICT_TONES)
+        tone = _stable_tone(NEUTRAL_TONES, topic_text, section_label, strictness)
+        return Question(text=_join_parts([tone, teacher_style, f"Otazka: {text}"]), meta=meta)
+    tone = _stable_tone(STRICT_TONES, topic_text, section_label, strictness)
     step_1 = "Krok 1: Ujasni si pojmy."
     step_2 = f"Krok 2: Zamer se na {topic_text}."
-    return Question(text=f"{tone} {step_1} {step_2} Otazka: {text}", meta=meta)
+    return Question(
+        text=_join_parts([tone, teacher_style, step_1, step_2, f"Otazka: {text}"]),
+        meta=meta,
+    )
 
 
 def _normalize_level(level: str | None) -> str:
@@ -289,3 +307,59 @@ def _coerce_expected_answer(value: object) -> float | None:
     if isinstance(value, (int, float)):
         return float(value)
     return None
+
+
+def _apply_section_focus(choices: list[Template], section: str) -> list[Template]:
+    section_key = section.upper()
+    filtered = choices
+    if section_key == "INTRO":
+        filtered = _filter_by_difficulty(choices, "easy")
+    elif section_key == "EXPLAIN":
+        filtered = _filter_by_type(choices, {TYPE_EXPLAIN, TYPE_FACT})
+    elif section_key == "PRACTICE":
+        filtered = _filter_by_difficulty(choices, "medium")
+    elif section_key == "TEST":
+        filtered = _filter_by_difficulty(choices, "hard")
+        if not filtered:
+            filtered = _filter_by_type(choices, {TYPE_ANALYZE, TYPE_MATH})
+    elif section_key == "RECAP":
+        filtered = _filter_by_type(choices, {TYPE_FACT, TYPE_EXPLAIN})
+    elif section_key == "END":
+        filtered = _filter_by_difficulty(choices, "easy")
+    return filtered or choices
+
+
+def _filter_by_difficulty(choices: list[Template], difficulty: str) -> list[Template]:
+    return [template for template in choices if template.get("difficulty") == difficulty]
+
+
+def _filter_by_type(choices: list[Template], allowed_types: set[str]) -> list[Template]:
+    return [template for template in choices if template.get("type") in allowed_types]
+
+
+def _stable_choice(choices: list[Template], *, seed_parts: list[str]) -> Template:
+    index = _stable_index("|".join(seed_parts), len(choices))
+    return choices[index]
+
+
+def _stable_tone(tones: list[str], topic: str, section: str, strictness: int) -> str:
+    seed = f"{topic}|{section}|{strictness}"
+    index = _stable_index(seed, len(tones))
+    return tones[index]
+
+
+def _stable_index(seed: str, length: int) -> int:
+    if length <= 1:
+        return 0
+    total = sum(ord(char) for char in seed)
+    return total % length
+
+
+def _teacher_style(strictness: int, persona_text: str, strict_mode_style: str) -> str:
+    if strictness >= 4 and strict_mode_style.strip():
+        return strict_mode_style.strip()
+    return persona_text.strip()
+
+
+def _join_parts(parts: list[str]) -> str:
+    return " ".join(part for part in parts if part)

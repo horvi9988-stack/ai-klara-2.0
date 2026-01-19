@@ -45,6 +45,7 @@ def load_memory(path: Path) -> StudentMemory:
         "subject": preferences.get("subject"),
         "level": preferences.get("level"),
         "topic": preferences.get("topic"),
+        "teacher_id": preferences.get("teacher_id"),
     }
     weakness_stats = data.get("weakness_stats", {})
     if not isinstance(weakness_stats, dict):

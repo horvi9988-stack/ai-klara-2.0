@@ -23,6 +23,14 @@ class TeacherEngineTests(unittest.TestCase):
         self.assertEqual(engine.strictness_peak, MIN_STRICTNESS)
         self.assertEqual(engine.state, "INIT")
 
+    def test_strictness_stays_within_bounds(self) -> None:
+        engine = TeacherEngine(strictness=MAX_STRICTNESS)
+        engine.evaluate(correct=False)
+        self.assertEqual(engine.strictness, MAX_STRICTNESS)
+        engine = TeacherEngine(strictness=MIN_STRICTNESS)
+        engine.evaluate(correct=True)
+        self.assertEqual(engine.strictness, MIN_STRICTNESS)
+
 
 if __name__ == "__main__":
     unittest.main()
