@@ -21,7 +21,7 @@ class LessonRecord:
 @dataclass
 class StudentMemory:
     lesson_history: list[LessonRecord] = field(default_factory=list)
-    preferences: dict[str, str | None] = field(default_factory=dict)
+    preferences: dict[str, object] = field(default_factory=dict)
     weakness_stats: dict[str, dict[str, dict[str, int]]] = field(default_factory=dict)
 
 
@@ -45,6 +45,9 @@ def load_memory(path: Path) -> StudentMemory:
         "subject": preferences.get("subject"),
         "level": preferences.get("level"),
         "topic": preferences.get("topic"),
+        "llm_enabled": preferences.get("llm_enabled"),
+        "llm_model": preferences.get("llm_model"),
+        "voice_enabled": preferences.get("voice_enabled"),
     }
     weakness_stats = data.get("weakness_stats", {})
     if not isinstance(weakness_stats, dict):

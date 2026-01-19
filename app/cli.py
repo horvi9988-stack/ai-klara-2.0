@@ -2,16 +2,20 @@ from __future__ import annotations
 
 """CLI entrypoint for Klara AI tutoring flow."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from app.core.evaluator import evaluate_answer
+from app.core.llm_question_engine import generate_llm_question
 from app.core.levels import normalize_level
+from app.core.local_sources import SourceChunk, ingest_file
 from app.core.mock_llm import reply
 from app.core.question_engine import Question, generate_question
 from app.core.subjects import normalize_subject
 from app.core.session import LessonSession
 from app.core.state_machine import TeacherEngine
+from app.core.voice import record_and_transcribe, speak_text, tts_dependency_message, voice_dependency_message
+from app.llm.ollama_client import DEFAULT_MODEL
 from app.storage.memory import (
     add_lesson_record,
     get_topic_stats,
@@ -36,6 +40,10 @@ class CliContext:
     topic: str | None = None
     subject: str | None = None
     level: str | None = None
+    llm_enabled: bool = False
+    llm_model: str = DEFAULT_MODEL
+    voice_enabled: bool = False
+    sources: list[SourceChunk] = field(default_factory=list)
 
 
 def handle_command(context: CliContext, command: str) -> str:
@@ -48,6 +56,8 @@ def handle_command(context: CliContext, command: str) -> str:
     if cmd == "/status":
         memory = load_memory(context.memory_path)
         top_weakness = _format_top_weakness(memory)
+        llm_state = "on" if context.llm_enabled else "off"
+        voice_state = "on" if context.voice_enabled else "off"
         return (
             f"state={context.engine.state} "
             f"section={context.session.current_section} "
@@ -55,6 +65,10 @@ def handle_command(context: CliContext, command: str) -> str:
             f"subject={context.subject or 'unset'} "
             f"level={context.level or 'unset'} "
             f"topic={context.topic or 'unset'} "
+            f"llm={llm_state} "
+            f"model={context.llm_model} "
+            f"voice={voice_state} "
+            f"sources={len(context.sources)} "
             f"weakness={top_weakness}"
         )
 
@@ -65,12 +79,18 @@ def handle_command(context: CliContext, command: str) -> str:
                 "/subject <name> (alias /s)",
                 "/level <name> (alias /lvl)",
                 "/topic <text>",
+                "/ingest <path>",
+                "/sources",
                 "/ask",
                 "/answer <text> (alias /a)",
                 "/repeat",
                 "/next",
                 "/quiz <n>",
                 "/weak",
+                "/llm on|off",
+                "/model <name>",
+                "/voice on|off",
+                "/ptt",
                 "/status",
                 "/ok",
                 "/fail",
@@ -118,6 +138,78 @@ def handle_command(context: CliContext, command: str) -> str:
         save_memory(context.memory_path, memory)
         return f"Uroven nastavena: {level}"
 
+    if cmd == "/llm":
+        return "Pouzij: /llm on|off"
+
+    if cmd.startswith("/llm "):
+        value = cmd.replace("/llm ", "", 1).strip().lower()
+        if value not in {"on", "off"}:
+            return "Pouzij: /llm on|off"
+        enabled = value == "on"
+        context.llm_enabled = enabled
+        memory = load_memory(context.memory_path)
+        memory.preferences["llm_enabled"] = enabled
+        save_memory(context.memory_path, memory)
+        return f"LLM mode: {'on' if enabled else 'off'}"
+
+    if cmd == "/model":
+        return "Pouzij: /model <name>"
+
+    if cmd.startswith("/model "):
+        model = cmd.replace("/model ", "", 1).strip()
+        if not model:
+            return "Pouzij: /model <name>"
+        context.llm_model = model
+        memory = load_memory(context.memory_path)
+        memory.preferences["llm_model"] = model
+        save_memory(context.memory_path, memory)
+        return f"Model nastaven: {model}"
+
+    if cmd == "/voice":
+        return "Pouzij: /voice on|off"
+
+    if cmd.startswith("/voice "):
+        value = cmd.replace("/voice ", "", 1).strip().lower()
+        if value not in {"on", "off"}:
+            return "Pouzij: /voice on|off"
+        if value == "off":
+            context.voice_enabled = False
+            memory = load_memory(context.memory_path)
+            memory.preferences["voice_enabled"] = False
+            save_memory(context.memory_path, memory)
+            return "Voice mode: off"
+        missing_messages = []
+        voice_message = voice_dependency_message()
+        if voice_message:
+            missing_messages.append(voice_message)
+        tts_message = tts_dependency_message()
+        if tts_message:
+            missing_messages.append(tts_message)
+        if missing_messages:
+            return "\n".join(missing_messages)
+        context.voice_enabled = True
+        memory = load_memory(context.memory_path)
+        memory.preferences["voice_enabled"] = True
+        save_memory(context.memory_path, memory)
+        return "Voice mode: on"
+
+    if cmd == "/ptt":
+        if not context.voice_enabled:
+            return "Voice mode is off. Use /voice on."
+        transcript, error = record_and_transcribe()
+        if error:
+            return error
+        if transcript is None:
+            return "No speech detected."
+        if context.session.last_question:
+            response = _handle_answer(context, transcript)
+        else:
+            response = _respond(context, context.session.current_section, transcript)
+        speak_error = speak_text(response)
+        if speak_error:
+            return f"{response}\n{speak_error}"
+        return response
+
     if cmd == "/ok":
         context.engine.evaluate(correct=True)
         section, _action = context.session.next_section()
@@ -164,6 +256,27 @@ def handle_command(context: CliContext, command: str) -> str:
     if cmd.startswith("/answer ") or cmd.startswith("/a "):
         raw = cmd.replace("/answer ", "", 1).replace("/a ", "", 1).strip()
         return _handle_answer(context, raw)
+
+    if cmd == "/ingest":
+        return "Pouzij: /ingest <path>"
+
+    if cmd.startswith("/ingest "):
+        raw_path = cmd.replace("/ingest ", "", 1).strip()
+        if not raw_path:
+            return "Pouzij: /ingest <path>"
+        try:
+            chunks = ingest_file(Path(raw_path))
+        except ValueError as exc:
+            return str(exc)
+        if not chunks:
+            return "No text found in file."
+        context.sources.extend(chunks)
+        return f"Ingested {len(chunks)} chunks from {raw_path}"
+
+    if cmd == "/sources":
+        if not context.sources:
+            return "No sources loaded."
+        return f"Sources loaded: {len(context.sources)}"
 
     if cmd == "/weak":
         if not context.subject:
@@ -234,6 +347,17 @@ def _ask_next_question(context: CliContext) -> str:
 def _generate_question(context: CliContext) -> Question:
     memory = load_memory(context.memory_path)
     prefer_easy = _should_prefer_easy(memory, context.subject, context.topic)
+    if context.llm_enabled:
+        llm_question = generate_llm_question(
+            context.subject,
+            context.level,
+            context.topic,
+            context.engine.strictness,
+            sources=context.sources,
+            model=context.llm_model,
+        )
+        if llm_question:
+            return llm_question
     return generate_question(
         context.subject,
         context.level,
@@ -326,6 +450,9 @@ def run_cli() -> None:
     saved_topic = prefs.get("topic")
     saved_subject = prefs.get("subject")
     saved_level = prefs.get("level")
+    saved_llm_enabled = prefs.get("llm_enabled")
+    saved_llm_model = prefs.get("llm_model")
+    saved_voice_enabled = prefs.get("voice_enabled")
     context = CliContext(
         engine=TeacherEngine(),
         session=LessonSession(),
@@ -334,6 +461,9 @@ def run_cli() -> None:
         topic=saved_topic if saved_topic else None,
         subject=saved_subject if saved_subject else None,
         level=saved_level if saved_level else None,
+        llm_enabled=True if saved_llm_enabled is True else False,
+        llm_model=saved_llm_model if isinstance(saved_llm_model, str) and saved_llm_model else DEFAULT_MODEL,
+        voice_enabled=True if saved_voice_enabled is True else False,
     )
 
     # nacti ulozeny topic z pameti (persistuje po restartu)
