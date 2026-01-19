@@ -1,3 +1,4 @@
+"""Run the Klara CLI."""
 from __future__ import annotations
 
 from app.cli import run_cli

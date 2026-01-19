@@ -1,3 +1,4 @@
+"""Rule-based replies for Klara when no LLM is available."""
 from __future__ import annotations
 
 
@@ -6,6 +7,7 @@ def reply(
     strictness: int,
     state: str,
     user_text: str,
+    *,
     subject: str | None = None,
     level: str | None = None,
 ) -> str:

@@ -1,7 +1,9 @@
+"""Question template engine for the CLI tutoring flow."""
 from __future__ import annotations
 
 import random
 from dataclasses import dataclass
+from typing import TypedDict
 
 SUPPORTIVE_TONES = [
     "Zkusme to spolu v klidu.",
@@ -45,10 +47,18 @@ class Question:
     meta: QuestionMeta
 
 
-Template = dict[str, object]
+class QuestionTemplate(TypedDict, total=False):
+    id: str
+    text: str
+    keywords: list[str]
+    difficulty: str
+    type: str
+    expected_answer: float
 
 
-SUBJECT_TEMPLATES: dict[str, dict[str, list[Template]]] = {
+TemplateMap = dict[str, list[QuestionTemplate]]
+
+SUBJECT_TEMPLATES: dict[str, TemplateMap] = {
     "dejepis": {
         "zakladni": [
             {
@@ -60,7 +70,7 @@ SUBJECT_TEMPLATES: dict[str, dict[str, list[Template]]] = {
             },
             {
                 "id": "hist_basic_2",
-                "text": "Kdo byl hlavni aktér {topic}?",
+                "text": "Kdo byl hlavni akter {topic}?",
                 "keywords": ["{topic}", "kdo"],
                 "difficulty": "easy",
                 "type": TYPE_FACT,
@@ -203,7 +213,7 @@ SUBJECT_TEMPLATES: dict[str, dict[str, list[Template]]] = {
     },
 }
 
-DEFAULT_TEMPLATES = {
+DEFAULT_TEMPLATES: TemplateMap = {
     "zakladni": [
         {
             "id": "default_basic",

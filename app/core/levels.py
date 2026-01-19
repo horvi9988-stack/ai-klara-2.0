@@ -1,6 +1,7 @@
+"""Level normalization helpers."""
 from __future__ import annotations
 
-LEVELS = {
+LEVELS: set[str] = {
     "zakladni",
     "stredni",
     "vysoka",
@@ -9,7 +10,7 @@ LEVELS = {
     "magisterska",
 }
 
-LEVEL_ALIASES = {
+LEVEL_ALIASES: dict[str, str] = {
     "zs": "zakladni",
     "ss": "stredni",
     "vs": "vysoka",
@@ -17,7 +18,7 @@ LEVEL_ALIASES = {
     "master": "magisterska",
 }
 
-LEVEL_NUMERIC_MAP = {
+LEVEL_NUMERIC_MAP: dict[str, str] = {
     "1": "zakladni",
     "2": "zakladni",
     "3": "stredni",

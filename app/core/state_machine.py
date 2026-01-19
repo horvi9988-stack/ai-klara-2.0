@@ -1,7 +1,7 @@
+"""Lesson strictness state machine."""
 from __future__ import annotations
 
 from dataclasses import dataclass
-
 
 MAX_STRICTNESS = 5
 MIN_STRICTNESS = 1
@@ -20,7 +20,7 @@ class TeacherEngine:
         self.state = "INTRO"
         self.strictness_peak = MIN_STRICTNESS
 
-    def evaluate(self, correct: bool) -> None:
+    def evaluate(self, *, correct: bool) -> None:
         self.state = "EVALUATE"
         if correct:
             self.strictness = max(MIN_STRICTNESS, self.strictness - 1)

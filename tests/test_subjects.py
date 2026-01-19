@@ -1,3 +1,6 @@
+"""Tests for subject normalization."""
+from __future__ import annotations
+
 import unittest
 
 from app.core.subjects import normalize_subject

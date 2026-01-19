@@ -1,6 +1,5 @@
-from __future__ import annotations
-
 """CLI entrypoint for Klara AI tutoring flow."""
+from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -17,6 +16,7 @@ from app.core.state_machine import TeacherEngine
 from app.core.voice import record_and_transcribe, speak_text, tts_dependency_message, voice_dependency_message
 from app.llm.ollama_client import DEFAULT_MODEL
 from app.storage.memory import (
+    StudentMemory,
     add_lesson_record,
     get_topic_stats,
     get_weakest_topics,
@@ -24,7 +24,6 @@ from app.storage.memory import (
     save_memory,
     update_weakness_stats,
 )
-
 
 APP_DIR = Path(__file__).resolve().parent
 PROMPT_PATH = APP_DIR / "prompts" / "klara.txt"
@@ -47,7 +46,10 @@ class CliContext:
 
 
 def handle_command(context: CliContext, command: str) -> str:
-    cmd = command.strip()
+    cmd, arg = _split_command(command)
+    if not cmd:
+        return ""
+
     if cmd == "/start":
         context.engine.start_lesson()
         context.session.reset()
@@ -73,124 +75,68 @@ def handle_command(context: CliContext, command: str) -> str:
         )
 
     if cmd == "/help":
-        return "\n".join(
-            [
-                "/start",
-                "/subject <name> (alias /s)",
-                "/level <name> (alias /lvl)",
-                "/topic <text>",
-                "/ingest <path>",
-                "/sources",
-                "/ask",
-                "/answer <text> (alias /a)",
-                "/repeat",
-                "/next",
-                "/quiz <n>",
-                "/weak",
-                "/llm on|off",
-                "/model <name>",
-                "/voice on|off",
-                "/ptt",
-                "/status",
-                "/ok",
-                "/fail",
-                "/end",
-            ]
-        )
+        return _help_text()
 
-    if cmd == "/topic":
-        return "Pouzij: /topic <text>"
-
-    if cmd.startswith("/topic "):
-        context.topic = cmd.replace("/topic ", "", 1).strip() or None
-
-        memory = load_memory(context.memory_path)
-        memory.preferences["topic"] = context.topic
-        save_memory(context.memory_path, memory)
-
+    if cmd in {"/topic"}:
+        if not arg:
+            return "Pouzij: /topic <text>"
+        context.topic = arg or None
+        _persist_preference(context, "topic", context.topic)
         return f"Tema nastavene: {context.topic or 'unset'}"
 
-    if cmd == "/subject":
-        return "Pouzij: /subject <name>"
-
-    if cmd.startswith("/subject ") or cmd.startswith("/s "):
-        raw = cmd.replace("/subject ", "", 1).replace("/s ", "", 1).strip()
-        subject = normalize_subject(raw)
+    if cmd in {"/subject", "/s"}:
+        if not arg:
+            return "Pouzij: /subject <name>"
+        subject = normalize_subject(arg)
         if not subject:
             return "Neznamy predmet."
         context.subject = subject
-        memory = load_memory(context.memory_path)
-        memory.preferences["subject"] = subject
-        save_memory(context.memory_path, memory)
+        _persist_preference(context, "subject", subject)
         return f"Predmet nastaven: {subject}"
 
-    if cmd == "/level":
-        return "Pouzij: /level <name>"
-
-    if cmd.startswith("/level ") or cmd.startswith("/lvl "):
-        raw = cmd.replace("/level ", "", 1).replace("/lvl ", "", 1).strip()
-        level = normalize_level(raw)
+    if cmd in {"/level", "/lvl"}:
+        if not arg:
+            return "Pouzij: /level <name>"
+        level = normalize_level(arg)
         if not level:
             return "Neznama uroven."
         context.level = level
-        memory = load_memory(context.memory_path)
-        memory.preferences["level"] = level
-        save_memory(context.memory_path, memory)
+        _persist_preference(context, "level", level)
         return f"Uroven nastavena: {level}"
 
     if cmd == "/llm":
-        return "Pouzij: /llm on|off"
-
-    if cmd.startswith("/llm "):
-        value = cmd.replace("/llm ", "", 1).strip().lower()
+        if not arg:
+            return "Pouzij: /llm on|off"
+        value = arg.lower()
         if value not in {"on", "off"}:
             return "Pouzij: /llm on|off"
         enabled = value == "on"
         context.llm_enabled = enabled
-        memory = load_memory(context.memory_path)
-        memory.preferences["llm_enabled"] = enabled
-        save_memory(context.memory_path, memory)
+        _persist_preference(context, "llm_enabled", enabled)
         return f"LLM mode: {'on' if enabled else 'off'}"
 
     if cmd == "/model":
-        return "Pouzij: /model <name>"
-
-    if cmd.startswith("/model "):
-        model = cmd.replace("/model ", "", 1).strip()
-        if not model:
+        if not arg:
             return "Pouzij: /model <name>"
-        context.llm_model = model
-        memory = load_memory(context.memory_path)
-        memory.preferences["llm_model"] = model
-        save_memory(context.memory_path, memory)
-        return f"Model nastaven: {model}"
+        context.llm_model = arg
+        _persist_preference(context, "llm_model", arg)
+        return f"Model nastaven: {arg}"
 
     if cmd == "/voice":
-        return "Pouzij: /voice on|off"
-
-    if cmd.startswith("/voice "):
-        value = cmd.replace("/voice ", "", 1).strip().lower()
+        if not arg:
+            return "Pouzij: /voice on|off"
+        value = arg.lower()
         if value not in {"on", "off"}:
             return "Pouzij: /voice on|off"
         if value == "off":
             context.voice_enabled = False
-            memory = load_memory(context.memory_path)
-            memory.preferences["voice_enabled"] = False
-            save_memory(context.memory_path, memory)
+            _persist_preference(context, "voice_enabled", False)
             return "Voice mode: off"
-        missing_messages = []
-        voice_message = voice_dependency_message()
-        if voice_message:
-            missing_messages.append(voice_message)
-        tts_message = tts_dependency_message()
-        if tts_message:
-            missing_messages.append(tts_message)
+        missing_messages = _missing_voice_messages()
         if missing_messages:
             return "\n".join(missing_messages)
         context.voice_enabled = True
-        memory = load_memory(context.memory_path)
-        memory.preferences["voice_enabled"] = True
-        save_memory(context.memory_path, memory)
+        _persist_preference(context, "voice_enabled", True)
         return "Voice mode: on"
 
     if cmd == "/ptt":
@@ -221,31 +167,11 @@ def handle_command(context: CliContext, command: str) -> str:
         return _respond(context, section, "")
 
     if cmd == "/end":
-        errors = context.engine.errors
-        strictness_peak = context.engine.strictness_peak
-        section_reached = context.session.current_section
-        message = context.engine.end_lesson()
-
-        memory = load_memory(context.memory_path)
-        add_lesson_record(
-            memory,
-            errors=errors,
-            strictness_peak=strictness_peak,
-            topic=context.topic,
-            subject=context.subject,
-            level=context.level,
-            questions_asked_count=context.session.questions_asked_count,
-            section_reached=section_reached,
-        )
-        save_memory(context.memory_path, memory)
-
+        message = _end_lesson(context)
         context.session.reset()
         return message
 
-    if cmd == "/ask":
-        return _ask_next_question(context)
-
-    if cmd == "/next":
+    if cmd in {"/ask", "/next"}:
         return _ask_next_question(context)
 
     if cmd == "/repeat":
@@ -253,25 +179,15 @@ def handle_command(context: CliContext, command: str) -> str:
             return context.session.last_question
         return "Nejdrive poloz otazku pomoci /ask."
 
-    if cmd.startswith("/answer ") or cmd.startswith("/a "):
-        raw = cmd.replace("/answer ", "", 1).replace("/a ", "", 1).strip()
-        return _handle_answer(context, raw)
+    if cmd in {"/answer", "/a"}:
+        if not arg:
+            return "Pouzij: /answer <text>"
+        return _handle_answer(context, arg)
 
     if cmd == "/ingest":
-        return "Pouzij: /ingest <path>"
-
-    if cmd.startswith("/ingest "):
-        raw_path = cmd.replace("/ingest ", "", 1).strip()
-        if not raw_path:
+        if not arg:
             return "Pouzij: /ingest <path>"
-        try:
-            chunks = ingest_file(Path(raw_path))
-        except ValueError as exc:
-            return str(exc)
-        if not chunks:
-            return "No text found in file."
-        context.sources.extend(chunks)
-        return f"Ingested {len(chunks)} chunks from {raw_path}"
+        return _ingest_path(context, arg)
 
     if cmd == "/sources":
         if not context.sources:
@@ -279,49 +195,113 @@ def handle_command(context: CliContext, command: str) -> str:
         return f"Sources loaded: {len(context.sources)}"
 
     if cmd == "/weak":
-        if not context.subject:
-            return "Nejdrive nastav predmet pomoci /subject."
-        memory = load_memory(context.memory_path)
-        weakest = get_weakest_topics(memory, subject=context.subject, limit=3)
-        if not weakest:
-            return "Zatim nemam data o slabinach."
-        lines = [
-            f"{index + 1}. {topic} (fail_rate={fail_rate:.0%}, total={total})"
-            for index, (topic, fail_rate, total) in enumerate(weakest)
-        ]
-        return "\n".join(lines)
+        return _weakness_report(context)
 
-    if cmd.startswith("/quiz"):
-        parts = cmd.split(maxsplit=1)
-        count = 5
-        if len(parts) == 2 and parts[1].strip():
-            try:
-                count = max(1, int(parts[1].strip()))
-            except ValueError:
-                return "Pouzij: /quiz <n>"
-        questions: list[Question] = []
-        for _ in range(count):
-            questions.append(_generate_question(context))
-        if questions:
-            last_question = questions[-1]
-            context.session.last_question = last_question.text
-            context.session.last_question_meta = last_question.meta
-        context.session.questions_asked_count += count
-        return "\n".join(
-            f"{index + 1}. {question.text}" for index, question in enumerate(questions)
-        )
+    if cmd == "/quiz":
+        return _quiz_questions(context, arg)
 
     if not cmd.startswith("/"):
         subject = normalize_subject(cmd)
         if subject:
             context.subject = subject
-            memory = load_memory(context.memory_path)
-            memory.preferences["subject"] = subject
-            save_memory(context.memory_path, memory)
+            _persist_preference(context, "subject", subject)
             return f"Predmet nastaven: {subject}"
         return _respond(context, context.session.current_section, cmd)
 
     return "Neznamy prikaz. Pouzij /help."
+
+
+def _split_command(raw: str) -> tuple[str, str]:
+    cleaned = raw.strip()
+    if not cleaned:
+        return "", ""
+    if not cleaned.startswith("/"):
+        return cleaned, ""
+    parts = cleaned.split(maxsplit=1)
+    command = parts[0]
+    argument = parts[1].strip() if len(parts) > 1 else ""
+    return command, argument
+
+
+def _help_text() -> str:
+    return "\n".join(
+        [
+            "/start",
+            "/subject <name> (alias /s)",
+            "/level <name> (alias /lvl)",
+            "/topic <text>",
+            "/ingest <path>",
+            "/sources",
+            "/ask",
+            "/answer <text> (alias /a)",
+            "/repeat",
+            "/next",
+            "/quiz <n>",
+            "/weak",
+            "/llm on|off",
+            "/model <name>",
+            "/voice on|off",
+            "/ptt",
+            "/status",
+            "/ok",
+            "/fail",
+            "/end",
+        ]
+    )
+
+
+def _missing_voice_messages() -> list[str]:
+    missing_messages = []
+    voice_message = voice_dependency_message()
+    if voice_message:
+        missing_messages.append(voice_message)
+    tts_message = tts_dependency_message()
+    if tts_message:
+        missing_messages.append(tts_message)
+    return missing_messages
+
+
+def _ingest_path(context: CliContext, raw_path: str) -> str:
+    try:
+        chunks = ingest_file(Path(raw_path))
+    except ValueError as exc:
+        return str(exc)
+    if not chunks:
+        return "No text found in file."
+    context.sources.extend(chunks)
+    return f"Ingested {len(chunks)} chunks from {raw_path}"
+
+
+def _quiz_questions(context: CliContext, argument: str) -> str:
+    count = 5
+    if argument:
+        try:
+            count = max(1, int(argument))
+        except ValueError:
+            return "Pouzij: /quiz <n>"
+    questions = [_generate_question(context) for _ in range(count)]
+    if questions:
+        last_question = questions[-1]
+        context.session.last_question = last_question.text
+        context.session.last_question_meta = last_question.meta
+    context.session.questions_asked_count += count
+    return "\n".join(
+        f"{index + 1}. {question.text}" for index, question in enumerate(questions)
+    )
+
+
+def _weakness_report(context: CliContext) -> str:
+    if not context.subject:
+        return "Nejdrive nastav predmet pomoci /subject."
+    memory = load_memory(context.memory_path)
+    weakest = get_weakest_topics(memory, subject=context.subject, limit=3)
+    if not weakest:
+        return "Zatim nemam data o slabinach."
+    lines = [
+        f"{index + 1}. {topic} (fail_rate={fail_rate:.0%}, total={total})"
+        for index, (topic, fail_rate, total) in enumerate(weakest)
+    ]
+    return "\n".join(lines)
 
 
 def _respond(context: CliContext, state: str, user_text: str) -> str:
@@ -406,7 +386,7 @@ def _format_feedback(strictness: int, ok: bool, score: float, tags: list[str]) -
     return f"{base} Skore {score_pct}.{tag_info} {guidance}"
 
 
-def _should_prefer_easy(memory, subject: str | None, topic: str | None) -> bool:
+def _should_prefer_easy(memory: StudentMemory, subject: str | None, topic: str | None) -> bool:
     if not subject or not topic:
         return False
     stats = get_topic_stats(memory, subject=subject, topic=topic)
@@ -420,7 +400,7 @@ def _should_prefer_easy(memory, subject: str | None, topic: str | None) -> bool:
     return fail_rate > 0.6
 
 
-def _format_top_weakness(memory) -> str:
+def _format_top_weakness(memory: StudentMemory) -> str:
     weakest_overall: tuple[str, str, float, int] | None = None
     for subject, topics in memory.weakness_stats.items():
         if not isinstance(topics, dict):
@@ -441,32 +421,65 @@ def _format_top_weakness(memory) -> str:
     return f"{subject}:{topic} ({fail_rate:.0%}, total={total})"
 
 
+def _persist_preference(context: CliContext, key: str, value: object) -> None:
+    memory = load_memory(context.memory_path)
+    memory.preferences[key] = value
+    save_memory(context.memory_path, memory)
+
+
+def _end_lesson(context: CliContext) -> str:
+    errors = context.engine.errors
+    strictness_peak = context.engine.strictness_peak
+    section_reached = context.session.current_section
+    message = context.engine.end_lesson()
+
+    memory = load_memory(context.memory_path)
+    add_lesson_record(
+        memory,
+        errors=errors,
+        strictness_peak=strictness_peak,
+        topic=context.topic,
+        subject=context.subject,
+        level=context.level,
+        questions_asked_count=context.session.questions_asked_count,
+        section_reached=section_reached,
+    )
+    save_memory(context.memory_path, memory)
+    return message
+
+
+def _load_preferences(memory: StudentMemory) -> dict[str, object]:
+    prefs = memory.preferences if isinstance(memory.preferences, dict) else {}
+    return {
+        "topic": prefs.get("topic"),
+        "subject": prefs.get("subject"),
+        "level": prefs.get("level"),
+        "llm_enabled": prefs.get("llm_enabled"),
+        "llm_model": prefs.get("llm_model"),
+        "voice_enabled": prefs.get("voice_enabled"),
+    }
+
+
 def run_cli() -> None:
     persona_text = ""
     if PROMPT_PATH.exists():
         persona_text = PROMPT_PATH.read_text(encoding="utf-8").strip()
     memory = load_memory(MEMORY_PATH)
-    prefs = memory.preferences if isinstance(memory.preferences, dict) else {}
-    saved_topic = prefs.get("topic")
-    saved_subject = prefs.get("subject")
-    saved_level = prefs.get("level")
-    saved_llm_enabled = prefs.get("llm_enabled")
-    saved_llm_model = prefs.get("llm_model")
-    saved_voice_enabled = prefs.get("voice_enabled")
+    prefs = _load_preferences(memory)
+
     context = CliContext(
         engine=TeacherEngine(),
         session=LessonSession(),
         memory_path=MEMORY_PATH,
         persona_text=persona_text,
-        topic=saved_topic if saved_topic else None,
-        subject=saved_subject if saved_subject else None,
-        level=saved_level if saved_level else None,
-        llm_enabled=True if saved_llm_enabled is True else False,
-        llm_model=saved_llm_model if isinstance(saved_llm_model, str) and saved_llm_model else DEFAULT_MODEL,
-        voice_enabled=True if saved_voice_enabled is True else False,
+        topic=prefs["topic"] if prefs["topic"] else None,
+        subject=prefs["subject"] if prefs["subject"] else None,
+        level=prefs["level"] if prefs["level"] else None,
+        llm_enabled=True if prefs["llm_enabled"] is True else False,
+        llm_model=prefs["llm_model"] if isinstance(prefs["llm_model"], str) and prefs["llm_model"] else DEFAULT_MODEL,
+        voice_enabled=True if prefs["voice_enabled"] is True else False,
     )
 
-    # nacti ulozeny topic z pameti (persistuje po restartu)
     print("Klara CLI. Zadej prikaz.")
     print("Type /start")
     print("Type /help")
@@ -481,7 +494,8 @@ def run_cli() -> None:
             continue
 
         response = handle_command(context, user_input)
-        print(response)
+        if response:
+            print(response)
 
         if user_input == "/end":
             break
