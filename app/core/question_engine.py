@@ -3,7 +3,6 @@ from __future__ import annotations
 import random
 from dataclasses import dataclass
 
-
 SUPPORTIVE_TONES = [
     "Zkusme to spolu v klidu.",
     "Jde ti to skvele, pokracujeme.",
