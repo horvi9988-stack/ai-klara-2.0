@@ -1,18 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-<<<<<<< ours
-git status -sb
-
-if rg -n "<<<<<<<|=======|>>>>>>>" . --glob "!scripts/check_repo.sh"; then
-  echo "Merge markers found. Resolve conflicts first."
-  exit 1
-fi
-
-python -m compileall -q .
-python -m pytest || python -m unittest
-printf "/end\n" | python main.py
-=======
 echo "== 1) Merge markers check =="
 if rg -n "<<<<<<<|=======|>>>>>>>" -g '!scripts/check_repo.sh' . ; then
   echo
@@ -36,4 +24,3 @@ fi
 
 echo
 echo "ALL OK."
->>>>>>> theirs
