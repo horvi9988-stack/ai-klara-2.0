@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from app.core.teachers import TeacherProfile
+
 
 def reply(
     persona_text: str,
@@ -8,9 +10,11 @@ def reply(
     user_text: str,
     subject: str | None = None,
     level: str | None = None,
+    teacher_profile: TeacherProfile | None = None,
 ) -> str:
-    tone = _tone(strictness)
-    persona_hint = _persona_hint(persona_text)
+    tone = _tone(strictness, teacher_profile)
+    persona_hint = _persona_hint(persona_text, teacher_profile)
+    teacher_hint = _teacher_hint(teacher_profile)
     topic_hint = _topic_hint(user_text)
     subject_label = subject or "obecne"
     level_label = level or "nezadana"
@@ -18,18 +22,26 @@ def reply(
     if strictness >= 4:
         steps = _strict_steps(subject_label, topic_hint)
         question = _question_for(subject_label, level_label, state)
-        return " ".join([tone, persona_hint, context_line, steps, question]).strip()
+        return " ".join(
+            [tone, persona_hint, teacher_hint, context_line, steps, question]
+        ).strip()
     mini_task = _mini_task(subject_label, topic_hint, state)
     question = _question_for(subject_label, level_label, state)
-    return " ".join([tone, persona_hint, context_line, mini_task, question]).strip()
+    return " ".join(
+        [tone, persona_hint, teacher_hint, context_line, mini_task, question]
+    ).strip()
 
 
-def _tone(strictness: int) -> str:
+def _tone(strictness: int, teacher_profile: TeacherProfile | None) -> str:
+    style_line = _teacher_style_line(teacher_profile)
     if strictness <= 2:
-        return "Jsi sikovny, jedeme dal."
+        base = "Jsi sikovny, jedeme dal."
+        return " ".join([style_line, base]).strip()
     if strictness == 3:
-        return "Budeme peclivi a jasni."
-    return "Ted budu prisna a povedu te krok po kroku."
+        base = "Budeme peclivi a jasni."
+        return " ".join([style_line, base]).strip()
+    base = "Ted budu prisna a povedu te krok po kroku."
+    return " ".join([style_line, base]).strip()
 
 
 def _strict_steps(subject: str, topic: str) -> str:
@@ -155,8 +167,35 @@ def _topic_hint(user_text: str) -> str:
     return cleaned
 
 
-def _persona_hint(persona_text: str) -> str:
+def _persona_hint(persona_text: str, teacher_profile: TeacherProfile | None) -> str:
     cleaned = persona_text.strip()
     if not cleaned:
+        if teacher_profile:
+            return f"Jsem {teacher_profile.name}."
         return ""
+    if teacher_profile:
+        return f"Jsem {teacher_profile.name}."
     return "Jsem Klara."
+
+
+def _teacher_style_line(teacher_profile: TeacherProfile | None) -> str:
+    if not teacher_profile:
+        return ""
+    style = teacher_profile.strictness_style
+    if style == "strict":
+        return "Strucne a presne."
+    if style == "supportive":
+        return "Jsem tu pro tebe."
+    if style == "coach":
+        return "Makame disciplinovane."
+    if style == "funny":
+        return "Dneska to dame s nadhledem."
+    return ""
+
+
+def _teacher_hint(teacher_profile: TeacherProfile | None) -> str:
+    if not teacher_profile:
+        return ""
+    if teacher_profile.catchphrases:
+        return teacher_profile.catchphrases[0]
+    return ""

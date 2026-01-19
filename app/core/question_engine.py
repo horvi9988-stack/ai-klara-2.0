@@ -3,6 +3,7 @@ from __future__ import annotations
 import random
 from dataclasses import dataclass
 
+from app.core.teachers import TeacherProfile
 SUPPORTIVE_TONES = [
     "Zkusme to spolu v klidu.",
     "Jde ti to skvele, pokracujeme.",
@@ -240,6 +241,7 @@ def generate_question(
     topic: str | None,
     strictness: int,
     *,
+    teacher_profile: TeacherProfile | None = None,
     prefer_easy: bool = False,
 ) -> Question:
     normalized_subject = subject or "obecne"
@@ -266,22 +268,53 @@ def generate_question(
         expected_answer=_coerce_expected_answer(selected.get("expected_answer")),
     )
 
+    tone_list = _pick_tone_list(strictness, teacher_profile)
+    tone = random.choice(tone_list)
+    prefix = _teacher_prefix(teacher_profile)
+    intro = " ".join(part for part in [prefix, tone] if part).strip()
     if strictness <= 2:
-        tone = random.choice(SUPPORTIVE_TONES)
-        return Question(text=f"{tone} {text}", meta=meta)
+        return Question(text=f"{intro} {text}".strip(), meta=meta)
     if strictness == 3:
-        tone = random.choice(NEUTRAL_TONES)
-        return Question(text=f"{tone} Otazka: {text}", meta=meta)
-    tone = random.choice(STRICT_TONES)
+        return Question(text=f"{intro} Otazka: {text}".strip(), meta=meta)
     step_1 = "Krok 1: Ujasni si pojmy."
     step_2 = f"Krok 2: Zamer se na {topic_text}."
-    return Question(text=f"{tone} {step_1} {step_2} Otazka: {text}", meta=meta)
+    return Question(text=f"{intro} {step_1} {step_2} Otazka: {text}".strip(), meta=meta)
 
 
 def _normalize_level(level: str | None) -> str:
     if level in {"zakladni", "stredni", "vysoka"}:
         return level
     return "zakladni"
+
+
+def _pick_tone_list(
+    strictness: int, teacher_profile: TeacherProfile | None
+) -> list[str]:
+    if strictness >= 4:
+        return STRICT_TONES
+    if teacher_profile:
+        style = teacher_profile.strictness_style
+        if style == "strict":
+            return STRICT_TONES
+        if style == "supportive":
+            return SUPPORTIVE_TONES
+        if style == "coach":
+            return NEUTRAL_TONES
+        if style == "funny":
+            return SUPPORTIVE_TONES
+    if strictness <= 2:
+        return SUPPORTIVE_TONES
+    if strictness == 3:
+        return NEUTRAL_TONES
+    return STRICT_TONES
+
+
+def _teacher_prefix(teacher_profile: TeacherProfile | None) -> str:
+    if not teacher_profile:
+        return ""
+    if teacher_profile.catchphrases:
+        return teacher_profile.catchphrases[0]
+    return ""
 
 
 def _coerce_expected_answer(value: object) -> float | None:
