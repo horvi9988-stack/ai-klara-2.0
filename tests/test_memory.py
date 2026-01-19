@@ -10,13 +10,19 @@ class MemoryPersistenceTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp_dir:
             path = Path(tmp_dir) / "memory.json"
             memory = StudentMemory(
-                preferences={"subject": "dejepis", "level": "vysoka", "topic": "stredovek"}
+                preferences={
+                    "subject": "dejepis",
+                    "level": "vysoka",
+                    "topic": "stredovek",
+                    "teacher_id": "mentor",
+                }
             )
             save_memory(path, memory)
             loaded = load_memory(path)
             self.assertEqual(loaded.preferences.get("subject"), "dejepis")
             self.assertEqual(loaded.preferences.get("level"), "vysoka")
             self.assertEqual(loaded.preferences.get("topic"), "stredovek")
+            self.assertEqual(loaded.preferences.get("teacher_id"), "mentor")
 
 
 if __name__ == "__main__":

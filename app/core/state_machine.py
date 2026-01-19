@@ -36,7 +36,7 @@ class TeacherEngine:
         self.strictness = MIN_STRICTNESS
         self.errors = 0
         self.strictness_peak = MIN_STRICTNESS
-        return "Dnesek koncime. Zvladli jsme to spolu."
+        return "Zvladli jsme to spolu."
 
     def reset(self) -> None:
         self.strictness = MIN_STRICTNESS
