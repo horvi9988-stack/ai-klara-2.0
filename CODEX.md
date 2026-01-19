@@ -33,7 +33,8 @@ Files:
 - app/cli.py -> commands: /help /start /topic /status /ok /fail /end
 - app/core/session.py -> LessonSection enum + next_section
 - app/core/state_machine.py -> TeacherEngine(strictness/errors/state/strictness_peak)
-- app/core/mock_llm.py -> reply(persona_text, strictness, state, topic_or_text) returns Klara response
+- app/core/mock_llm.py -> reply(persona_text, strictness, state, topic_or_text, teacher_profile) returns response
+- app/core/teachers.py -> TeacherProfile definitions + lookup helpers
 - app/storage/memory.py -> JSON storage app/storage/student_memory.json with lesson_history
 
 ## Constraints
@@ -42,6 +43,17 @@ Files:
 - No external APIs yet (no OpenAI calls).
 - No self-modifying code.
 - Keep `python main.py` runnable and `python -m unittest` passing.
+
+## Workflow rules
+- One commit = one change.
+- No mega-refactors unless asked. Minimal diffs only.
+- Always run `./scripts/check_repo.sh` before commit or PR.
+- Always include tests and show the outputs in your report.
+
+## Codex prompt template
+Use this format when assigning Codex work:
+- "Implement X, minimal diff, 1 commit, include outputs from ./scripts/check_repo.sh"
+- "Do not remove working features. Add only."
 
 ## Acceptance checklist
 CLI:

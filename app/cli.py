@@ -10,6 +10,12 @@ from app.core.levels import normalize_level
 from app.core.mock_llm import reply
 from app.core.question_engine import Question, generate_question
 from app.core.subjects import normalize_subject
+from app.core.teachers import (
+    TeacherProfile,
+    find_teacher_profile,
+    get_teacher_profile,
+    list_teacher_profiles,
+)
 from app.core.session import LessonSession
 from app.core.state_machine import TeacherEngine
 from app.storage.memory import (
@@ -33,6 +39,7 @@ class CliContext:
     session: LessonSession
     memory_path: Path
     persona_text: str
+    teacher_profile: TeacherProfile
     topic: str | None = None
     subject: str | None = None
     level: str | None = None
@@ -52,6 +59,7 @@ def handle_command(context: CliContext, command: str) -> str:
             f"state={context.engine.state} "
             f"section={context.session.current_section} "
             f"strictness={context.engine.strictness} errors={context.engine.errors} "
+            f"teacher={context.teacher_profile.id}:{context.teacher_profile.name} "
             f"subject={context.subject or 'unset'} "
             f"level={context.level or 'unset'} "
             f"topic={context.topic or 'unset'} "
@@ -70,6 +78,8 @@ def handle_command(context: CliContext, command: str) -> str:
                 "/repeat",
                 "/next",
                 "/quiz <n>",
+                "/teachers",
+                "/teacher <id>",
                 "/weak",
                 "/status",
                 "/ok",
@@ -117,6 +127,27 @@ def handle_command(context: CliContext, command: str) -> str:
         memory.preferences["level"] = level
         save_memory(context.memory_path, memory)
         return f"Uroven nastavena: {level}"
+
+    if cmd == "/teachers":
+        profiles = list_teacher_profiles()
+        lines = [
+            f"{profile.id} - {profile.name} ({profile.vibe})" for profile in profiles
+        ]
+        return "\n".join(lines)
+
+    if cmd == "/teacher":
+        return "Pouzij: /teacher <id>"
+
+    if cmd.startswith("/teacher "):
+        raw = cmd.replace("/teacher ", "", 1).strip()
+        profile = find_teacher_profile(raw)
+        if not profile:
+            return "Neznamy ucitel."
+        context.teacher_profile = profile
+        memory = load_memory(context.memory_path)
+        memory.preferences["teacher"] = profile.id
+        save_memory(context.memory_path, memory)
+        return f"Ucitel nastaven: {profile.name}"
 
     if cmd == "/ok":
         context.engine.evaluate(correct=True)
@@ -220,6 +251,7 @@ def _respond(context: CliContext, state: str, user_text: str) -> str:
         topic_hint,
         subject=context.subject,
         level=context.level,
+        teacher_profile=context.teacher_profile,
     )
 
 
@@ -239,6 +271,7 @@ def _generate_question(context: CliContext) -> Question:
         context.level,
         context.topic,
         context.engine.strictness,
+        teacher_profile=context.teacher_profile,
         prefer_easy=prefer_easy,
     )
 
@@ -326,11 +359,14 @@ def run_cli() -> None:
     saved_topic = prefs.get("topic")
     saved_subject = prefs.get("subject")
     saved_level = prefs.get("level")
+    saved_teacher = prefs.get("teacher")
+    teacher_profile = get_teacher_profile(saved_teacher)
     context = CliContext(
         engine=TeacherEngine(),
         session=LessonSession(),
         memory_path=MEMORY_PATH,
         persona_text=persona_text,
+        teacher_profile=teacher_profile,
         topic=saved_topic if saved_topic else None,
         subject=saved_subject if saved_subject else None,
         level=saved_level if saved_level else None,
