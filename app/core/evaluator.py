@@ -30,11 +30,7 @@ def evaluate_answer(question_meta: QuestionMeta, answer_text: str) -> Evaluation
         return EvaluationResult(ok=True, score=1.0, feedback_tags=["no_keywords"])
 
     matched = [keyword for keyword in keywords if keyword in cleaned_answer]
-<<<<<<< ours
-    required = _required_keyword_count(question_meta.difficulty_tag)
-=======
     required = min(_required_keyword_count(question_meta.difficulty_tag), len(keywords))
->>>>>>> theirs
     score = len(matched) / len(keywords)
     ok = len(matched) >= required
     feedback_tags = ["keyword_scoring"]

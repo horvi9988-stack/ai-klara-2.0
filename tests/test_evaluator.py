@@ -18,8 +18,6 @@ class EvaluatorTests(unittest.TestCase):
         result = evaluate_answer(meta, "Byla to pricina i dopad 1. svetova valka.")
         self.assertTrue(result.ok)
 
-<<<<<<< ours
-=======
     def test_hard_keyword_requirement_caps_at_keyword_count(self) -> None:
         meta = QuestionMeta(
             subject="matematika",
@@ -32,8 +30,6 @@ class EvaluatorTests(unittest.TestCase):
         )
         result = evaluate_answer(meta, "integral a odvod jsem popsal")
         self.assertTrue(result.ok)
-
->>>>>>> theirs
 
 if __name__ == "__main__":
     unittest.main()
