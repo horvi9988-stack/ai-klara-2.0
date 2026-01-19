@@ -1,0 +1,8 @@
+# Base requirements
+# (none)
+
+# Optional: local ingest
+# pip install pypdf python-docx
+
+# Optional: voice mode
+# pip install faster-whisper sounddevice numpy pyttsx3
