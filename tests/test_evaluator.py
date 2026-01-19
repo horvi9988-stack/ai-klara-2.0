@@ -31,5 +31,9 @@ class EvaluatorTests(unittest.TestCase):
         result = evaluate_answer(meta, "integral a odvod jsem popsal")
         self.assertTrue(result.ok)
 
+<<<<<<< ours
+=======
+
+>>>>>>> theirs
 if __name__ == "__main__":
     unittest.main()
