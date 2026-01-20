@@ -58,4 +58,5 @@ def _clean_text(text: str | None) -> str | None:
     if text is None:
         return None
     cleaned = text.strip().lower()
+    cleaned = _SPACE_RE.sub("_", cleaned)
     return cleaned or None
