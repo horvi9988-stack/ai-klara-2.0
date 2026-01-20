@@ -209,27 +209,37 @@ def main() -> None:
                 st.write(f"**Klara**: {message}")
     
     # Command input
-    st.subheader("Commands")
+    st.subheader("Input & Response")
+    
+    # Determine placeholder text based on context
+    if context.session.last_question:
+        placeholder = "Type your answer here..."
+        help_text = "📝 Answer the question above"
+    else:
+        placeholder = "Type command (e.g., /help, /start) or text"
+        help_text = "💬 Enter a command or text"
     
     col1, col2 = st.columns([3, 1])
     with col1:
         user_input = st.text_input(
-            "Enter command or text:",
-            placeholder="Type /help for available commands",
+            help_text,
+            placeholder=placeholder,
             key="command_input"
         )
     with col2:
         submit = st.button("Send", use_container_width=True)
     
     if submit and user_input:
-        # Process command
-        response = handle_command(context, user_input)
+        # If there's a pending question, treat input as answer
+        if context.session.last_question:
+            response = handle_command(context, f"/answer {user_input}")
+        else:
+            # Otherwise treat as command
+            response = handle_command(context, user_input)
+        
         st.session_state.chat_history.append(("user", user_input))
         st.session_state.chat_history.append(("system", response))
         st.session_state.last_response = response
-        
-        # Clear input
-        st.session_state.command_input = ""
         st.rerun()
     
     # Quick action buttons
