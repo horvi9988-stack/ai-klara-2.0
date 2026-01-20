@@ -52,6 +52,7 @@ class CliContext:
     sources: list[SourceChunk] = field(default_factory=list)
     custom_subjects: set[str] = field(default_factory=set)
     custom_subject_aliases: dict[str, str] = field(default_factory=dict)
+    mode: str = "teacher"
 
 
 def handle_command(context: CliContext, command: str) -> str:
@@ -88,6 +89,8 @@ def handle_command(context: CliContext, command: str) -> str:
                 "/subject add <name>",
                 "/level <name> (alias /lvl)",
                 "/topic <text>",
+                "/mode teacher|assistant",
+                "/todo add|list|done <index>",
                 "/ingest <path>",
                 "/sources",
                 "/ask",
@@ -118,6 +121,56 @@ def handle_command(context: CliContext, command: str) -> str:
         save_memory(context.memory_path, memory)
 
         return f"Tema nastavene: {context.topic or 'unset'}"
+
+    if cmd == "/mode":
+        return "Pouzij: /mode teacher|assistant"
+
+    if cmd.startswith("/mode "):
+        mode_arg = cmd.replace("/mode ", "", 1).strip().lower()
+        if mode_arg not in {"teacher", "assistant"}:
+            return "Pouzij: /mode teacher|assistant"
+        context.mode = mode_arg
+        memory = load_memory(context.memory_path)
+        memory.preferences["mode"] = mode_arg
+        save_memory(context.memory_path, memory)
+        return f"Mode nastaven: {mode_arg}"
+
+    if cmd == "/todo":
+        return "Pouzij: /todo add|list|done"
+
+    if cmd.startswith("/todo add "):
+        if context.mode != "assistant":
+            return "Todo je dostupne pouze v assistant mode (/mode assistant)"
+        todo_text = cmd.replace("/todo add ", "", 1).strip()
+        if not todo_text:
+            return "Pouzij: /todo add <text>"
+        memory = load_memory(context.memory_path)
+        memory.todos.append(todo_text)
+        save_memory(context.memory_path, memory)
+        return f"Todo pridan: {todo_text}"
+
+    if cmd == "/todo list":
+        if context.mode != "assistant":
+            return "Todo je dostupne pouze v assistant mode (/mode assistant)"
+        memory = load_memory(context.memory_path)
+        if not memory.todos:
+            return "Zadne todos"
+        lines = [f"{index + 1}. {todo}" for index, todo in enumerate(memory.todos)]
+        return "\n".join(lines)
+
+    if cmd.startswith("/todo done "):
+        if context.mode != "assistant":
+            return "Todo je dostupne pouze v assistant mode (/mode assistant)"
+        try:
+            index = int(cmd.replace("/todo done ", "", 1).strip()) - 1
+        except ValueError:
+            return "Pouzij: /todo done <index>"
+        memory = load_memory(context.memory_path)
+        if index < 0 or index >= len(memory.todos):
+            return "Spatny index"
+        removed = memory.todos.pop(index)
+        save_memory(context.memory_path, memory)
+        return f"Todo hotove: {removed}"
 
     if cmd == "/subject add":
         return "Pouzij: /subject add <name>"
@@ -512,6 +565,7 @@ def run_cli() -> None:
     saved_llm_enabled = prefs.get("llm_enabled")
     saved_llm_model = prefs.get("llm_model")
     saved_voice_enabled = prefs.get("voice_enabled")
+    saved_mode = prefs.get("mode", "teacher")
     custom_subjects = _load_custom_subjects(memory)
     custom_subject_aliases = _load_custom_subject_aliases(memory)
     context = CliContext(
@@ -527,6 +581,7 @@ def run_cli() -> None:
         voice_enabled=True if saved_voice_enabled is True else False,
         custom_subjects=custom_subjects,
         custom_subject_aliases=custom_subject_aliases,
+        mode=saved_mode if saved_mode in {"teacher", "assistant"} else "teacher",
     )
 
     # nacti ulozeny topic z pameti (persistuje po restartu)

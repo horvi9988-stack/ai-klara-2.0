@@ -27,6 +27,7 @@ class StudentMemory:
     weakness_stats: dict[str, dict[str, dict[str, int]]] = field(default_factory=dict)
     custom_subjects: list[str] = field(default_factory=list)
     custom_subject_aliases: dict[str, str] = field(default_factory=dict)
+    todos: list[str] = field(default_factory=list)
 
 
 def load_memory(path: Path) -> StudentMemory:
@@ -52,6 +53,7 @@ def load_memory(path: Path) -> StudentMemory:
         "llm_enabled": preferences.get("llm_enabled"),
         "llm_model": preferences.get("llm_model"),
         "voice_enabled": preferences.get("voice_enabled"),
+        "mode": preferences.get("mode", "teacher"),
     }
     weakness_stats = data.get("weakness_stats", {})
     if not isinstance(weakness_stats, dict):
@@ -68,12 +70,17 @@ def load_memory(path: Path) -> StudentMemory:
         for key, value in custom_subject_aliases.items()
         if isinstance(key, str) and key and isinstance(value, str) and value
     }
+    todos = data.get("todos", [])
+    if not isinstance(todos, list):
+        todos = []
+    todos = [todo for todo in todos if isinstance(todo, str) and todo]
     return StudentMemory(
         lesson_history=history,
         preferences=preferences,
         weakness_stats=weakness_stats,
         custom_subjects=custom_subjects,
         custom_subject_aliases=custom_subject_aliases,
+        todos=todos,
     )
 
 
@@ -84,6 +91,7 @@ def save_memory(path: Path, memory: StudentMemory) -> None:
         "weakness_stats": memory.weakness_stats,
         "custom_subjects": memory.custom_subjects,
         "custom_subject_aliases": memory.custom_subject_aliases,
+        "todos": memory.todos,
     }
     path.write_text(json.dumps(payload, ensure_ascii=True, indent=2), encoding="utf-8")
 
