@@ -1,5 +1,5 @@
 # Base requirements
-# (none)
+streamlit
 
 # Optional: local ingest
 # pip install pypdf python-docx

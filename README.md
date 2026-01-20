@@ -1,15 +1,33 @@
 # ai-klara-2.0
 
-Klara is a local CLI tutor. This repo runs fully offline with an optional local LLM
+Klara is a local tutor with CLI and GUI modes. This repo runs fully offline with an optional local LLM
 via Ollama and optional voice input/output.
 
 ## Quick start
+
+### CLI Mode (Terminal)
 
 ```bash
 python main.py
 ```
 
 Use `/help` to see available commands.
+
+### GUI Mode (Web Browser) - NEW! 🎉
+
+```bash
+streamlit run streamlit_app.py
+```
+
+The app opens automatically in your browser at `http://localhost:8501`.
+
+**Features:**
+- Settings panel for subject, level, topic, mode
+- **File upload for scripts and textbooks** (PDF, DOCX, TXT)
+- Chat-like interface with conversation history
+- Quick action buttons (Start, Ask, OK, Fail, End)
+- Todo management in Assistant mode
+- Persistent settings and memory
 
 ## Local LLM with Ollama (free/local mode)
 
