@@ -253,7 +253,7 @@ def generate_question(
     if prefer_easy:
         easy_choices = [template for template in choices if template.get("difficulty") == "easy"]
         if easy_choices:
-/            choices = easy_choices
+             choices = easy_choices
     selected = random.choice(choices)
 
     text = str(selected["text"]).format(topic=topic_text)
