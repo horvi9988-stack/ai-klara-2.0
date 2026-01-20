@@ -2,12 +2,7 @@
 from __future__ import annotations
 
 import random
-<<<<<<< ours
-<<<<<<< ours
-=======
 from dataclasses import dataclass
->>>>>>> theirs
-=======
 from dataclasses import dataclass
 from typing import TypedDict
 
@@ -259,12 +254,9 @@ def generate_question(
     *,
     prefer_easy: bool = False,
 ) -> Question:
->>>>>>> theirs
-=======
     *,
     prefer_easy: bool = False,
 ) -> Question:
->>>>>>> theirs
     normalized_subject = subject or "obecne"
     normalized_level = _normalize_level(level)
     topic_text = topic.strip() if topic else "tematu"
