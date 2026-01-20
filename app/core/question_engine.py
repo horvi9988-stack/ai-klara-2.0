@@ -5,6 +5,8 @@ from __future__ import annotations
 import random
 from dataclasses import dataclass
 
+from app.core.local_sources import SourceChunk
+
 SUPPORTIVE_TONES = [
     "Zkusme to spolu v klidu.",
     "Jde ti to skvele, pokracujeme.",
@@ -243,10 +245,13 @@ def generate_question(
     strictness: int,
     *,
     prefer_easy: bool = False,
+    sources: list[SourceChunk] | None = None,
 ) -> Question:
     normalized_subject = subject or "obecne"
     normalized_level = _normalize_level(level)
     topic_text = topic.strip() if topic else "tematu"
+    
+    # Get base question from templates
     templates = SUBJECT_TEMPLATES.get(normalized_subject, DEFAULT_TEMPLATES)
     choices = templates.get(normalized_level, DEFAULT_TEMPLATES[normalized_level])
 
@@ -256,7 +261,19 @@ def generate_question(
              choices = easy_choices
     selected = random.choice(choices)
 
+    # Build question text
     text = str(selected["text"]).format(topic=topic_text)
+    
+    # If sources available, retrieve relevant context and add context hint
+    context_hint = ""
+    if sources:
+        from app.core.local_sources import retrieve_chunks
+        retrieved = retrieve_chunks(sources, f"{normalized_subject} {topic_text}", limit=1)
+        if retrieved:
+            chunk_preview = retrieved[0].text[:100].replace("\n", " ")
+            context_hint = f"\n[Z vaseho dokumentu: {chunk_preview}...]"
+            text = text + context_hint
+    
     keywords = [str(keyword).format(topic=topic_text) for keyword in selected.get("keywords", [])]
     meta = QuestionMeta(
         subject=normalized_subject,

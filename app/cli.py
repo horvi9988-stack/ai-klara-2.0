@@ -441,6 +441,7 @@ def _generate_question(context: CliContext) -> Question:
         context.topic,
         context.engine.strictness,
         prefer_easy=prefer_easy,
+        sources=context.sources,
     )
 
 
