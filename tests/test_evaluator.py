@@ -1,3 +1,7 @@
+from __future__ import annotations
+
+"""Tests for answer evaluation."""
+
 import unittest
 
 from app.core.evaluator import evaluate_answer

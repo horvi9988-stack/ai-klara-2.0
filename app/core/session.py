@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+"""Lesson session state and section helpers."""
+
 from dataclasses import dataclass, field
 
 from app.core.question_engine import QuestionMeta

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+"""State transitions for the tutoring flow."""
+
 from dataclasses import dataclass
 
 

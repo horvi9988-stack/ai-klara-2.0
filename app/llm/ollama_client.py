@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+"""Minimal Ollama client wrapper."""
+
 import json
 from urllib.error import URLError
 from urllib.request import Request, urlopen
