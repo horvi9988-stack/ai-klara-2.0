@@ -6,3 +6,8 @@
 
 # Optional: voice mode
 # pip install faster-whisper sounddevice numpy pyttsx3
+pyttsx3
+faster-whisper
+pypdf
+python-docx
+rapidfuzz
