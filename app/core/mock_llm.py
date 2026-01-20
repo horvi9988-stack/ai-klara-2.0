@@ -1,3 +1,4 @@
+"""Rule-based replies for Klara when no LLM is available."""
 from __future__ import annotations
 
 from app.core.teachers import TeacherProfile
@@ -8,6 +9,7 @@ def reply(
     strictness: int,
     state: str,
     user_text: str,
+    *,
     subject: str | None = None,
     level: str | None = None,
     teacher_profile: TeacherProfile | None = None,

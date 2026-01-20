@@ -1,3 +1,4 @@
+"""Simple Ollama HTTP client."""
 from __future__ import annotations
 
 import json

@@ -1,3 +1,6 @@
+"""Tests for the teacher engine state machine."""
+from __future__ import annotations
+
 import unittest
 
 from app.core.state_machine import MAX_STRICTNESS, MIN_STRICTNESS, TeacherEngine

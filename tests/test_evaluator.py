@@ -1,3 +1,6 @@
+"""Tests for answer evaluation."""
+from __future__ import annotations
+
 import unittest
 
 from app.core.evaluator import evaluate_answer
@@ -31,9 +34,6 @@ class EvaluatorTests(unittest.TestCase):
         result = evaluate_answer(meta, "integral a odvod jsem popsal")
         self.assertTrue(result.ok)
 
-<<<<<<< ours
-=======
 
->>>>>>> theirs
 if __name__ == "__main__":
     unittest.main()

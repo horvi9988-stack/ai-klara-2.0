@@ -1,12 +1,11 @@
+"""Lesson session state for the CLI flow."""
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 
 from app.core.question_engine import QuestionMeta
 
-
 SECTIONS = ["INTRO", "EXPLAIN", "PRACTICE", "TEST", "RECAP", "END"]
-
 
 SECTION_ACTIONS = {
     "INTRO": "Uvitani a rychly prehled tematu.",

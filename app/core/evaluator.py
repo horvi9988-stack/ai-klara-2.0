@@ -1,9 +1,12 @@
+"""Answer evaluation utilities."""
 from __future__ import annotations
 
 import re
 from dataclasses import dataclass
 
 from app.core.question_engine import QuestionMeta, TYPE_MATH
+
+NUMBER_PATTERN = re.compile(r"-?\d+(?:[\.,]\d+)?")
 
 
 @dataclass
@@ -42,7 +45,7 @@ def evaluate_answer(question_meta: QuestionMeta, answer_text: str) -> Evaluation
 
 
 def _extract_number(text: str) -> float | None:
-    match = re.search(r"-?\d+(?:[\.,]\d+)?", text)
+    match = NUMBER_PATTERN.search(text)
     if not match:
         return None
     raw = match.group(0).replace(",", ".")

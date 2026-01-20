@@ -1,3 +1,6 @@
+"""Tests for lesson session tracking."""
+from __future__ import annotations
+
 import unittest
 
 from app.core.question_engine import QuestionMeta, TYPE_FACT

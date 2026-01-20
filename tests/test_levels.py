@@ -1,3 +1,6 @@
+"""Tests for level normalization."""
+from __future__ import annotations
+
 import unittest
 
 from app.core.levels import normalize_level

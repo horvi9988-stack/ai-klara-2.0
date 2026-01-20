@@ -1,3 +1,4 @@
+"""Local document ingestion and lightweight retrieval."""
 from __future__ import annotations
 
 import importlib
