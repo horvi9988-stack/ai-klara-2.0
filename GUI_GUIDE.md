@@ -42,10 +42,19 @@ Shows: Subject, Level, Topic, Mode, Strictness, Section, Errors, LLM Status, Voi
 - Displays all messages between you and Klara
 - Shows your commands and Klara's responses
 
-#### **Command Input**
-- Enter commands or text
-- Type `/help` to see all available commands
-- Hit "Send" to execute
+#### **Command Input** 🆕 Smart Answer Detection
+- **Before question**: Enter commands (`/help`, `/start`, etc.) or text
+- **After question**: Simply type your answer - no `/answer` needed!
+- The app detects if a question is pending and auto-submits as answer
+- Placeholder text changes to guide you: "Type your answer here..."
+
+**Example:**
+```
+Klara: "What is 2 + 2?"
+You: type "4" and press Send
+↓
+Klara: "Correct! ✅"
+```
 
 #### **Quick Action Buttons**
 - 📖 **Start**: Begin a new lesson
@@ -73,11 +82,17 @@ Shows: Subject, Level, Topic, Mode, Strictness, Section, Errors, LLM Status, Voi
 5. Set Topic: "addition" or upload a PDF with examples
 6. Click "Start" button
 7. Click "Ask" to get a question
-8. Student answers in command input (or you read their answer)
+8. Student types answer directly (no /answer needed!)
 9. Click "OK" if correct, "Fail" if not
 10. Repeat steps 7-9
 11. Click "End" to finish and save
 ```
+
+**Smart Answer Detection:**
+- When a question is pending, the input placeholder says "Type your answer here..."
+- Just type the answer and press Send
+- App automatically treats it as `/answer <answer>`
+- No need to type `/answer` manually!
 
 ### 2. Assistant Mode - Manage Todos
 
@@ -118,7 +133,6 @@ Type in the **Command Input** box and hit "Send":
 /todo list             - List todos (assistant mode)
 /todo done <index>     - Mark todo done (assistant mode)
 /ask                   - Get a question
-/answer <text>         - Submit an answer
 /ok                    - Correct answer
 /fail                  - Incorrect answer
 /next                  - Get next question
@@ -128,6 +142,14 @@ Type in the **Command Input** box and hit "Send":
 /end                   - End lesson
 /status                - Show current state
 ```
+
+**💡 Pro Tip - Smart Answers:**
+- You don't need to type `/answer` in the GUI!
+- When a question is pending, just type your answer directly
+- The app automatically detects and handles it
+- Example: Klara asks "What is 5+3?" → You type "8" → Send → Done!
+
+---
 
 ---
 
