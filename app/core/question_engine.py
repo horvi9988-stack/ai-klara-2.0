@@ -3,6 +3,8 @@ from __future__ import annotations
 """Question templates and generation logic."""
 
 import random
+import re
+from collections import Counter
 from dataclasses import dataclass
 
 from app.core.local_sources import SourceChunk
@@ -308,3 +310,85 @@ def _coerce_expected_answer(value: object) -> float | None:
     if isinstance(value, (int, float)):
         return float(value)
     return None
+
+
+def _extract_explicit_questions_from_text(text: str) -> list[str]:
+    """Extract obviously formatted questions from a block of text.
+
+    Looks for numbered lists (e.g. "1) ...", "1.") and headings like
+    "Názorné otázky" followed by lines that look like questions.
+    """
+    questions: list[str] = []
+    # numbered items like '1) ...' or '1. ...'
+    for m in re.finditer(r"^\s*(?:\d+\)|\d+\.)\s*(.+)$", text, flags=re.MULTILINE):
+        q = m.group(1).strip()
+        if q and len(q) > 10:
+            questions.append(q)
+
+    # sections with the word 'otáz' (covers 'otázky' / 'otázka')
+    for m in re.finditer(r"(?mi)(?:názorné\s+otázky|otázky|otázka)\s*[:\-]?\s*\n(.*?)\n\n", text + "\n\n"):
+        block = m.group(1).strip()
+        for line in block.splitlines():
+            line = line.strip()
+            if line and len(line) > 10:
+                questions.append(line)
+
+    # deduplicate while preserving order
+    seen = set()
+    out = []
+    for q in questions:
+        if q not in seen:
+            seen.add(q)
+            out.append(q)
+    return out
+
+
+def generate_lesson_from_sources(
+    sources: list[SourceChunk],
+    subject: str | None = None,
+    level: str | None = None,
+    strictness: int = 4,
+    *,
+    n_generated: int = 8,
+) -> list[str]:
+    """Create a lesson: extract explicit questions from sources and generate additional ones.
+
+    Returns a list of question texts (strings) combining extracted and generated items.
+    """
+    if not sources:
+        return []
+
+    # Combine all text
+    full = "\n\n".join(chunk.text for chunk in sources)
+
+    explicit = _extract_explicit_questions_from_text(full)
+
+    # Simple token frequency to pick topics for generated questions
+    tokens = [t for t in re.split(r"\W+", full.lower()) if len(t) > 4]
+    stopwords = {
+        "které", "který", "která", "tedy", "proto", "kterou", "kterým",
+        "může", "muset", "bude", "jsou", "je", "se", "s"
+    }
+    filtered = [t for t in tokens if t not in stopwords]
+    freq = Counter(filtered)
+    topics = [t for t, _ in freq.most_common(n_generated * 2)]
+
+    generated = []
+    used_topics = set()
+    for t in topics:
+        if len(generated) >= n_generated:
+            break
+        if t in used_topics:
+            continue
+        used_topics.add(t)
+        q = generate_question(subject or "obecne", level or "zakladni", t, strictness, sources=sources)
+        generated.append(q.text)
+
+    # Merge explicit (from doc) first, then generated ones
+    combined: list[str] = []
+    for q in explicit:
+        combined.append(f"[Z dokumentu] {q}")
+    for q in generated:
+        combined.append(f"[Vygenerováno] {q}")
+
+    return combined

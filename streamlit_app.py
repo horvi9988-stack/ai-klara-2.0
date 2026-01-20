@@ -178,24 +178,48 @@ def main() -> None:
             if uploads_list:
                 st.subheader("Repository uploads")
                 selected = st.selectbox("Select file from uploads:", uploads_list, key="uploads_select")
-                if st.button("Ingest selected file"):
-                    sel_path = uploads_dir / selected
-                    try:
-                        chunks2 = ingest_file(sel_path)
-                        if chunks2:
-                            context.sources.extend(chunks2)
-                            msg2 = f"✅ Ingested {selected}: {len(chunks2)} chunks"
-                            st.session_state.chat_history.append(("system", msg2))
-                            st.session_state.last_response = msg2
-                            st.success(msg2)
-                        else:
-                            msg2 = "❌ No text found in file"
+                col_a, col_b = st.columns([2,1])
+                with col_a:
+                    if st.button("Ingest selected file"):
+                        sel_path = uploads_dir / selected
+                        try:
+                            chunks2 = ingest_file(sel_path)
+                            if chunks2:
+                                context.sources.extend(chunks2)
+                                msg2 = f"✅ Ingested {selected}: {len(chunks2)} chunks"
+                                st.session_state.chat_history.append(("system", msg2))
+                                st.session_state.last_response = msg2
+                                st.success(msg2)
+                            else:
+                                msg2 = "❌ No text found in file"
+                                st.session_state.chat_history.append(("system", msg2))
+                                st.error(msg2)
+                        except Exception as e:
+                            msg2 = f"❌ Error: {str(e)}"
                             st.session_state.chat_history.append(("system", msg2))
                             st.error(msg2)
-                    except Exception as e:
-                        msg2 = f"❌ Error: {str(e)}"
-                        st.session_state.chat_history.append(("system", msg2))
-                        st.error(msg2)
+                with col_b:
+                    if st.button("Generate lesson from selected"):
+                        from app.core.question_engine import generate_lesson_from_sources
+                        sel_path = uploads_dir / selected
+                        try:
+                            chunks2 = ingest_file(sel_path)
+                            lesson = generate_lesson_from_sources(chunks2, subject=context.subject or 'ekonomie', level=context.level or 'zakladni', strictness=context.engine.strictness, n_generated=12)
+                            # save lesson
+                            lesson_file = uploads_dir / f"lesson_{selected}.txt"
+                            lesson_file.write_text("\n\n".join(lesson), encoding='utf-8')
+                            msg3 = f"✅ Generated lesson ({len(lesson)} items) and saved to {lesson_file.name}"
+                            st.session_state.chat_history.append(("system", msg3))
+                            st.session_state.last_response = msg3
+                            st.success(msg3)
+                            # display first 20 items
+                            st.subheader('Generated lesson preview')
+                            for i, it in enumerate(lesson[:20], 1):
+                                st.write(f"{i}. {it}")
+                        except Exception as e:
+                            msg3 = f"❌ Error generating lesson: {str(e)}"
+                            st.session_state.chat_history.append(("system", msg3))
+                            st.error(msg3)
 
             st.info(f"📄 {len(context.sources)} chunks loaded" if context.sources else "📄 No files loaded")
         
