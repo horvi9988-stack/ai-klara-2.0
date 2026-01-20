@@ -1,3 +1,7 @@
+from __future__ import annotations
+
+"""Tests for the state machine."""
+
 import unittest
 
 from app.core.state_machine import MAX_STRICTNESS, MIN_STRICTNESS, TeacherEngine

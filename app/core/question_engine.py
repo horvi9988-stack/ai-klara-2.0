@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+"""Question templates and generation logic."""
+
 import random
 from dataclasses import dataclass
 

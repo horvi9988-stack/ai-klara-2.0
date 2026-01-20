@@ -1,3 +1,7 @@
+from __future__ import annotations
+
+"""Tests for memory persistence."""
+
 import tempfile
 import unittest
 from pathlib import Path

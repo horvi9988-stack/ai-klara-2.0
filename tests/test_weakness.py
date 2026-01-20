@@ -1,3 +1,7 @@
+from __future__ import annotations
+
+"""Tests for weakness tracking."""
+
 import tempfile
 import unittest
 from pathlib import Path

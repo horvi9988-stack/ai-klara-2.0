@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+"""Local document ingestion and simple chunk retrieval."""
+
 import importlib
 import importlib.util
 import re

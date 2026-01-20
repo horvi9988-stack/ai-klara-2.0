@@ -11,12 +11,18 @@ from app.core.levels import normalize_level
 from app.core.local_sources import SourceChunk, ingest_file
 from app.core.mock_llm import reply
 from app.core.question_engine import Question, generate_question
-from app.core.subjects import normalize_subject
+from app.core.subjects import normalize_subject, sanitize_subject_name
 from app.core.session import LessonSession
 from app.core.state_machine import TeacherEngine
-from app.core.voice import record_and_transcribe, speak_text, tts_dependency_message, voice_dependency_message
+from app.core.voice import (
+    record_and_transcribe,
+    speak_text,
+    tts_dependency_message,
+    voice_dependency_message,
+)
 from app.llm.ollama_client import DEFAULT_MODEL
 from app.storage.memory import (
+    StudentMemory,
     add_lesson_record,
     get_topic_stats,
     get_weakest_topics,
@@ -44,6 +50,8 @@ class CliContext:
     llm_model: str = DEFAULT_MODEL
     voice_enabled: bool = False
     sources: list[SourceChunk] = field(default_factory=list)
+    custom_subjects: set[str] = field(default_factory=set)
+    custom_subject_aliases: dict[str, str] = field(default_factory=dict)
 
 
 def handle_command(context: CliContext, command: str) -> str:
@@ -77,6 +85,7 @@ def handle_command(context: CliContext, command: str) -> str:
             [
                 "/start",
                 "/subject <name> (alias /s)",
+                "/subject add <name>",
                 "/level <name> (alias /lvl)",
                 "/topic <text>",
                 "/ingest <path>",
@@ -110,12 +119,23 @@ def handle_command(context: CliContext, command: str) -> str:
 
         return f"Tema nastavene: {context.topic or 'unset'}"
 
+    if cmd == "/subject add":
+        return "Pouzij: /subject add <name>"
+
+    if cmd.startswith("/subject add "):
+        raw = cmd.replace("/subject add ", "", 1).strip()
+        return _handle_subject_add(context, raw)
+
     if cmd == "/subject":
         return "Pouzij: /subject <name>"
 
     if cmd.startswith("/subject ") or cmd.startswith("/s "):
         raw = cmd.replace("/subject ", "", 1).replace("/s ", "", 1).strip()
-        subject = normalize_subject(raw)
+        subject = normalize_subject(
+            raw,
+            extra_subjects=context.custom_subjects,
+            extra_aliases=context.custom_subject_aliases,
+        )
         if not subject:
             return "Neznamy predmet."
         context.subject = subject
@@ -312,7 +332,11 @@ def handle_command(context: CliContext, command: str) -> str:
         )
 
     if not cmd.startswith("/"):
-        subject = normalize_subject(cmd)
+        subject = normalize_subject(
+            cmd,
+            extra_subjects=context.custom_subjects,
+            extra_aliases=context.custom_subject_aliases,
+        )
         if subject:
             context.subject = subject
             memory = load_memory(context.memory_path)
@@ -390,6 +414,29 @@ def _handle_answer(context: CliContext, answer_text: str) -> str:
     return _format_feedback(context.engine.strictness, evaluation.ok, evaluation.score, evaluation.feedback_tags)
 
 
+def _handle_subject_add(context: CliContext, raw: str) -> str:
+    if not raw:
+        return "Pouzij: /subject add <name>"
+    sanitized = sanitize_subject_name(raw)
+    if not sanitized:
+        return "Predmet musi obsahovat alespon jeden alfanumericky znak."
+    existing = normalize_subject(
+        sanitized,
+        extra_subjects=context.custom_subjects,
+        extra_aliases=context.custom_subject_aliases,
+    )
+    if existing:
+        context.subject = existing
+        return f"Predmet uz existuje: {existing}"
+    context.custom_subjects.add(sanitized)
+    context.subject = sanitized
+    memory = load_memory(context.memory_path)
+    memory.custom_subjects = sorted({*memory.custom_subjects, sanitized})
+    memory.preferences["subject"] = sanitized
+    save_memory(context.memory_path, memory)
+    return f"Predmet pridan: {sanitized}"
+
+
 def _format_feedback(strictness: int, ok: bool, score: float, tags: list[str]) -> str:
     score_pct = f"{score:.0%}"
     if strictness <= 2:
@@ -406,7 +453,7 @@ def _format_feedback(strictness: int, ok: bool, score: float, tags: list[str]) -
     return f"{base} Skore {score_pct}.{tag_info} {guidance}"
 
 
-def _should_prefer_easy(memory, subject: str | None, topic: str | None) -> bool:
+def _should_prefer_easy(memory: StudentMemory, subject: str | None, topic: str | None) -> bool:
     if not subject or not topic:
         return False
     stats = get_topic_stats(memory, subject=subject, topic=topic)
@@ -420,7 +467,7 @@ def _should_prefer_easy(memory, subject: str | None, topic: str | None) -> bool:
     return fail_rate > 0.6
 
 
-def _format_top_weakness(memory) -> str:
+def _format_top_weakness(memory: StudentMemory) -> str:
     weakest_overall: tuple[str, str, float, int] | None = None
     for subject, topics in memory.weakness_stats.items():
         if not isinstance(topics, dict):
@@ -441,6 +488,18 @@ def _format_top_weakness(memory) -> str:
     return f"{subject}:{topic} ({fail_rate:.0%}, total={total})"
 
 
+def _load_custom_subjects(memory: StudentMemory) -> set[str]:
+    return {subject for subject in memory.custom_subjects if isinstance(subject, str) and subject}
+
+
+def _load_custom_subject_aliases(memory: StudentMemory) -> dict[str, str]:
+    return {
+        alias: target
+        for alias, target in memory.custom_subject_aliases.items()
+        if isinstance(alias, str) and alias and isinstance(target, str) and target
+    }
+
+
 def run_cli() -> None:
     persona_text = ""
     if PROMPT_PATH.exists():
@@ -453,6 +512,8 @@ def run_cli() -> None:
     saved_llm_enabled = prefs.get("llm_enabled")
     saved_llm_model = prefs.get("llm_model")
     saved_voice_enabled = prefs.get("voice_enabled")
+    custom_subjects = _load_custom_subjects(memory)
+    custom_subject_aliases = _load_custom_subject_aliases(memory)
     context = CliContext(
         engine=TeacherEngine(),
         session=LessonSession(),
@@ -464,6 +525,8 @@ def run_cli() -> None:
         llm_enabled=True if saved_llm_enabled is True else False,
         llm_model=saved_llm_model if isinstance(saved_llm_model, str) and saved_llm_model else DEFAULT_MODEL,
         voice_enabled=True if saved_voice_enabled is True else False,
+        custom_subjects=custom_subjects,
+        custom_subject_aliases=custom_subject_aliases,
     )
 
     # nacti ulozeny topic z pameti (persistuje po restartu)

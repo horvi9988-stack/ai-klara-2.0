@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+"""Answer evaluation and scoring helpers."""
+
 import re
 from dataclasses import dataclass
 

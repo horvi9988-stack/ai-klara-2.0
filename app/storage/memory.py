@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+"""Persistence helpers for student memory and preferences."""
+
 import json
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -23,6 +25,8 @@ class StudentMemory:
     lesson_history: list[LessonRecord] = field(default_factory=list)
     preferences: dict[str, object] = field(default_factory=dict)
     weakness_stats: dict[str, dict[str, dict[str, int]]] = field(default_factory=dict)
+    custom_subjects: list[str] = field(default_factory=list)
+    custom_subject_aliases: dict[str, str] = field(default_factory=dict)
 
 
 def load_memory(path: Path) -> StudentMemory:
@@ -52,7 +56,25 @@ def load_memory(path: Path) -> StudentMemory:
     weakness_stats = data.get("weakness_stats", {})
     if not isinstance(weakness_stats, dict):
         weakness_stats = {}
-    return StudentMemory(lesson_history=history, preferences=preferences, weakness_stats=weakness_stats)
+    custom_subjects = data.get("custom_subjects", [])
+    if not isinstance(custom_subjects, list):
+        custom_subjects = []
+    custom_subjects = [subject for subject in custom_subjects if isinstance(subject, str) and subject]
+    custom_subject_aliases = data.get("custom_subject_aliases", {})
+    if not isinstance(custom_subject_aliases, dict):
+        custom_subject_aliases = {}
+    custom_subject_aliases = {
+        key: value
+        for key, value in custom_subject_aliases.items()
+        if isinstance(key, str) and key and isinstance(value, str) and value
+    }
+    return StudentMemory(
+        lesson_history=history,
+        preferences=preferences,
+        weakness_stats=weakness_stats,
+        custom_subjects=custom_subjects,
+        custom_subject_aliases=custom_subject_aliases,
+    )
 
 
 def save_memory(path: Path, memory: StudentMemory) -> None:
@@ -60,6 +82,8 @@ def save_memory(path: Path, memory: StudentMemory) -> None:
         "lesson_history": [record.__dict__ for record in memory.lesson_history],
         "preferences": memory.preferences,
         "weakness_stats": memory.weakness_stats,
+        "custom_subjects": memory.custom_subjects,
+        "custom_subject_aliases": memory.custom_subject_aliases,
     }
     path.write_text(json.dumps(payload, ensure_ascii=True, indent=2), encoding="utf-8")
 

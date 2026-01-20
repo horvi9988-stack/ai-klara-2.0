@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+"""LLM-backed question generation."""
+
 from app.core.local_sources import SourceChunk, retrieve_chunks
 from app.core.question_engine import Question, QuestionMeta, TYPE_EXPLAIN
 from app.llm.ollama_client import generate

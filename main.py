@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+"""CLI entrypoint."""
+
 from app.cli import run_cli
 
 

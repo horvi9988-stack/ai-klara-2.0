@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+"""Level normalization helpers."""
+
 LEVELS = {
     "zakladni",
     "stredni",

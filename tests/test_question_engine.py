@@ -1,3 +1,7 @@
+from __future__ import annotations
+
+"""Tests for question generation."""
+
 import unittest
 
 from app.core.question_engine import generate_question

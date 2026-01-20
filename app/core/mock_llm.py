@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+"""Rule-based fallback responses for the tutoring flow."""
 
 def reply(
     persona_text: str,
