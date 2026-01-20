@@ -1,0 +1,93 @@
+[Z dokumentu] kapitoly. Co tyto pojmy znamenají? ŘEŠENÍ: užitek je subjektivní míra uspokojení dané potřeby, mezní užitek je subjektivní míra uspokojení potřeby plynoucí z dodatečně spotřebované jednotky dané komodity. 8. Pokud bude théta vysoká, jaká bude subjektivní úroková míra? ŘEŠENÍ: subjektivní úroková míra bude taktéž vysoká, protože to jsou stejné věci. 9. Pokud bude tržní úroková míra 5 %, kolik bude mezní míra substituce ve směně? ŘEŠENÍ: mezní míra substituce ve směně bude MRSE = (1+r), tj. MRSE = (1+0,05) → 1,05. Znamená to, že pokud se domácnost vzdá se 1 Kč současné spotřeby a umístí ji na trhu kapitálu, tak se jí zhodnotí v budoucnosti na 1,05 Kč. 10. Pokud bude tržní úroková míra 5 % a mezní míra časových preferencí bude 0,3, bude domácnost v optimu? ŘEŠENÍ: V optimu by mělo platit θ = r, což zde neplatí, protože je 0,05 ˂ 0,3. Znamená to, že tržní úroková míra nedává domácnosti dostatečnou motivaci k tomu, aby uspořila dodatečnou peněžní jednotku. EKONOMIE 108 11. Pokud vzroste tržní úroková míra o 2 %, jaký nastane substituční efekt a proč? ŘEŠENÍ: Růst úrokové míry zvyšuje náklady obětované příležitosti současné spotřeby, tj. o co více domácnost v současnosti utratí na spotřebu, o to větší výnos přichází v budoucnosti, protože kdyby část uspořila, dostala by v budoucnosti o 2 % více než před růstem úrokové míry. Vlivem růstu úrokové míry se tedy současná spotřeba stává relativně dražší (vyjádřeno náklady obětovanými příležitosti), proto domácnost bude omezovat současnou spotřebu a spořit, aby zvýšila spotřebu budoucí. 12. Pokud vzroste tržní úroková míra v ekonomice o 1,7 %, jaký to pravděpodobně bude mít vliv na výdaje na konečnou spotřebu domácností a na hrubé národní úspory? ŘEŠENÍ: Růst úrokové míry pravděpodobně povede k poklesu spotřebních výdajů a růstu národních úspor na makroekonomické úrovni. EKONOMIE 109 SHRNUTÍ/ HLAVNÍ VÝSTUPY Z KAPITOLY  Keynesovská spotřební funkce vychází z tzv. běžného důchodu, resp. disponibilního běžného důchodu.  Disponibilní běžný důchod = YD (HDD) = Y(HDP) – TA – tY + TR.  Keynesovská spotřební funkce má 2 složky: autonomní spotřeba = Ca, indukovaná spotřeba = mpcYD. Algebraický zápis je C = Ca + mpcYD.  Mezní sklon ke spotřebě je 𝒎𝒑𝒄 = 𝜟𝑪 𝜟𝒀𝑫 .  Průměrný sklon ke spotřebě 𝒂𝒑𝒄 = 𝑪 𝒀𝑫 .  Úsporová funkce 𝑺 = 𝑺𝒂 + 𝒎𝒑𝒔𝒀𝑫.  Součet Mps + mpc = 1.  Vliv změn HDP na spotřebu: růst HDP → růst YD →
+
+[Z dokumentu] 3 Názorné otázky, úkoly a příklady pro lepší pochopení látky Názorné otázky, úkoly a příklady slouží především k procvičení a případnému podrobnějšímu vysvětlení látky na praktických příkladech. Proto jsou součástí teoretického výkladu a jejich řešení je uváděno hned za zadáním. K samostatnému procvičování látky studenty jsou určeny nejen tyto otázky, úkoly a příklady, ale také další otázky a příklady na konci kapitoly a zejména v základní literatuře. 1. Jakou mají přibližně délku a čím jsou způsobeny krátkodobé cykly? ŘEŠENÍ: Krátkodobé cykly bývají do cca 40 měsíců délky a jsou způsobeny výkyvy v zásobách. 2. Vysvětlete pojem potenciální produkt. ŘEŠENÍ: Potenciální produkt představuje dlouhodobý trend vývoje reálného HDP v čase. 3. Načrtněte schematický průběh hospodářského cyklu a vyznačte jednotlivé fáze. ŘEŠENÍ: Zdroj: Šumpíková, Pošta (2022). EKONOMIE 171 4. Dochází-li k útlumu ekonomiky v důsledku negativního SAS šoku, jaký to bude mít vliv na nezaměstnanost a míru inflace? ŘEŠENÍ: Míra nezaměstnanosti poroste a míra inflace také. 5. Pokud je ekonomika v expanzi v důsledku pozitivního AD šoku, jaký to bude mít vliv na nezaměstnanost a míru inflace? ŘEŠENÍ: Míra nezaměstnanosti bude klesat a míra inflace poroste. 6. Jaké skupiny obyvatelstva patří do ekonomicky neaktivních? ŘEŠENÍ: Patří sem zejména osoby mladší 15 let, studenti, důchodci, osoby na rodičovské dovolené. 7. Vysvětlete pojem „sebezaměstnaný“. ŘEŠENÍ: Jde o osoby samostatně výdělečně činné (= živnostníci = OSVČ) a podnikatele. 8. Počet zaměstnaných v ekonomice je 5 000 tis. osob, celková pracovní síla je 5 500 tis. osob. Kolik je míra nezaměstnanosti? ŘEŠENÍ: Počet nezaměstnaných = U = celková pracovní síla – počet zaměstnaných, tj. U = 5 500 – 5000 = 500 tis. osob. Míra nezaměstnanosti je (500/5500)*100 = 9,1 %. 9. Jakou míru nezaměstnanosti vykazuje Český statistický úřad? ŘEŠENÍ: Obecnou míru nezaměstnanosti podle metodiky Mezinárodní organizace práce (ILO). 10. Do které nezaměstnanosti patří lidé, kterým končí výpovědní lhůta pracovního kontraktu u jednoho zaměstnavatele k 31. březnu 2022 a k druhému zaměstnavateli nastupují dle podepsané pracovní smlouvy od 1. června 2022? ŘEŠENÍ: Tyto osoby patří do frikční nezaměstnanosti. EKONOMIE 172 11. Zvýšení mobility pracovních sil je nástroj zaměřený primárně na léčení jakého druhu nezaměstnanosti? ŘEŠENÍ: Je zaměřený především na strukturální nezaměstnanost. 12. Pokud je ekonomika v záporné produkční mezeře, jaký je vztah mezi skutečnou mírou nezaměstnanosti a přirozenou mírou nezaměstnanosti? ŘEŠENÍ: Skutečná míra nezaměstnanosti je vyšší než přirozená. 13. Jaké druhy nezaměstnanosti patří do přirozené míry nezaměstnanosti? ŘEŠENÍ: Patří sem: frikční (včetně sezónní) a strukturální nezaměstnanost.
+
+[Vygenerováno] Jde ti to skvele, pokracujeme. Uved priklad z praxe k žádná uvedených.
+[Z vaseho dokumentu: (max/min cíle při omezení). Srovnávání dodatečných přínosů vůči dodatečným nákladům.  TYPY VÝROKŮ: ...]
+
+[Vygenerováno] Jde ti to skvele, pokracujeme. Uved priklad z praxe k uvedených odpovědí.
+[Z vaseho dokumentu: (max/min cíle při omezení). Srovnávání dodatečných přínosů vůči dodatečným nákladům.  TYPY VÝROKŮ: ...]
+
+[Vygenerováno] Neboj, zvladnes to. Definuj pojem souvisejici s odpovědí není.
+[Z vaseho dokumentu: (max/min cíle při omezení). Srovnávání dodatečných přínosů vůči dodatečným nákladům.  TYPY VÝROKŮ: ...]
+
+[Vygenerováno] Neboj, zvladnes to. Definuj pojem souvisejici s není správná.
+[Z vaseho dokumentu: (max/min cíle při omezení). Srovnávání dodatečných přínosů vůči dodatečným nákladům.  TYPY VÝROKŮ: ...]
+
+[Vygenerováno] Jde ti to skvele, pokracujeme. Uved priklad z praxe k úkoly příklady.
+[Z vaseho dokumentu: Studijní opora EKONOMIE Markéta Šumpíková Jana Marková 2025 EKONOMIE 2 Název: EKONOMIE Autorky: doc....]
+
+[Vygenerováno] Neboj, zvladnes to. Definuj pojem souvisejici s otázky úkoly.
+[Z vaseho dokumentu: Studijní opora EKONOMIE Markéta Šumpíková Jana Marková 2025 EKONOMIE 2 Název: EKONOMIE Autorky: doc....]
+
+[Vygenerováno] Zkusme to spolu v klidu. Uved priklad z praxe k názorné otázky.
+[Z vaseho dokumentu: Studijní opora EKONOMIE Markéta Šumpíková Jana Marková 2025 EKONOMIE 2 Název: EKONOMIE Autorky: doc....]
+
+[Vygenerováno] Zkusme to spolu v klidu. Definuj pojem souvisejici s mezní užitek.
+[Z vaseho dokumentu: pouze dva statky, X a Y (případně budou v analýze použity 2 konkrétní statky).  Oba statky jsou sta...]
+
+[Vygenerováno] Zkusme to spolu v klidu. Uved priklad z praxe k produkt práce.
+[Z vaseho dokumentu: přičítá ještě implicitní náklady, což jsou náklady obětované příležitosti. Jedná se vlastně o výnos ...]
+
+[Vygenerováno] Zkusme to spolu v klidu. Uved priklad z praxe k měnový kurz.
+[Z vaseho dokumentu: Studijní opora EKONOMIE Markéta Šumpíková Jana Marková 2025 EKONOMIE 2 Název: EKONOMIE Autorky: doc....]
+
+[Vygenerováno] Neboj, zvladnes to. Uved priklad z praxe k jednotek práce.
+[Z vaseho dokumentu: této základní literatuře, aby byly snadněji dohledatelné. EKONOMIE 8 1 METODY, VYBRANÉ POJMY Tato ka...]
+
+[Vygenerováno] Zkusme to spolu v klidu. Definuj pojem souvisejici s mezní míra.
+[Z vaseho dokumentu: pouze dva statky, X a Y (případně budou v analýze použity 2 konkrétní statky).  Oba statky jsou sta...]
+
+[Vygenerováno] Neboj, zvladnes to. Definuj pojem souvisejici s elektronická kniha.
+[Z vaseho dokumentu: úkoly a příklady pro lepší pochopení látky ..................................117 LITERATURA............]
+
+[Vygenerováno] Neboj, zvladnes to. Definuj pojem souvisejici s příklady lepší.
+[Z vaseho dokumentu: Studijní opora EKONOMIE Markéta Šumpíková Jana Marková 2025 EKONOMIE 2 Název: EKONOMIE Autorky: doc....]
+
+[Vygenerováno] Zkusme to spolu v klidu. Definuj pojem souvisejici s lepší pochopení.
+[Z vaseho dokumentu: Studijní opora EKONOMIE Markéta Šumpíková Jana Marková 2025 EKONOMIE 2 Název: EKONOMIE Autorky: doc....]
+
+[Vygenerováno] Jde ti to skvele, pokracujeme. Uved priklad z praxe k pochopení látky.
+[Z vaseho dokumentu: Studijní opora EKONOMIE Markéta Šumpíková Jana Marková 2025 EKONOMIE 2 Název: EKONOMIE Autorky: doc....]
+
+[Vygenerováno] Jde ti to skvele, pokracujeme. Uved priklad z praxe k volného času.
+[Z vaseho dokumentu: a mezních nákladů firmy, :c2 MR – MC = 0, :c3 nulový zisk firmy, :c4 kladný zisk firmy, :c5 Žádná z ...]
+
+[Vygenerováno] Jde ti to skvele, pokracujeme. Definuj pojem souvisejici s objem produkce.
+[Z vaseho dokumentu: Studijní opora EKONOMIE Markéta Šumpíková Jana Marková 2025 EKONOMIE 2 Název: EKONOMIE Autorky: doc....]
+
+[Vygenerováno] Jde ti to skvele, pokracujeme. Definuj pojem souvisejici s výrobních faktorů.
+[Z vaseho dokumentu: této základní literatuře, aby byly snadněji dohledatelné. EKONOMIE 8 1 METODY, VYBRANÉ POJMY Tato ka...]
+
+[Vygenerováno] Zkusme to spolu v klidu. Definuj pojem souvisejici s mezní produkt.
+[Z vaseho dokumentu: přičítá ještě implicitní náklady, což jsou náklady obětované příležitosti. Jedná se vlastně o výnos ...]
+
+[Vygenerováno] Jde ti to skvele, pokracujeme. Uved priklad z praxe k správná ekonomie.
+[Z vaseho dokumentu: (max/min cíle při omezení). Srovnávání dodatečných přínosů vůči dodatečným nákladům.  TYPY VÝROKŮ: ...]
+
+[Vygenerováno] Neboj, zvladnes to. Definuj pojem souvisejici s trhu práce.
+[Z vaseho dokumentu: Studijní opora EKONOMIE Markéta Šumpíková Jana Marková 2025 EKONOMIE 2 Název: EKONOMIE Autorky: doc....]
+
+[Vygenerováno] Jde ti to skvele, pokracujeme. Definuj pojem souvisejici s monetární politiky.
+[Z vaseho dokumentu: úkoly a příklady pro lepší pochopení látky ..................................117 LITERATURA............]
+
+[Vygenerováno] Jde ti to skvele, pokracujeme. Uved priklad z praxe k pošta 2022.
+[Z vaseho dokumentu: úkoly a příklady pro lepší pochopení látky ..................................117 LITERATURA............]
+
+[Vygenerováno] Neboj, zvladnes to. Definuj pojem souvisejici s aktivizace aplikace.
+[Z vaseho dokumentu: (max/min cíle při omezení). Srovnávání dodatečných přínosů vůči dodatečným nákladům.  TYPY VÝROKŮ: ...]
+
+[Vygenerováno] Zkusme to spolu v klidu. Definuj pojem souvisejici s správné odpovědi.
+[Z vaseho dokumentu: (max/min cíle při omezení). Srovnávání dodatečných přínosů vůči dodatečným nákladům.  TYPY VÝROKŮ: ...]
+
+[Vygenerováno] Jde ti to skvele, pokracujeme. Definuj pojem souvisejici s mzdové sazby.
+[Z vaseho dokumentu: i na podnikatele, kteří se také rozhodují o počtu hodin práce a počtu hodin volného času. Domácnost ...]
+
+[Vygenerováno] Neboj, zvladnes to. Definuj pojem souvisejici s isbn 978.
+[Z vaseho dokumentu: (max/min cíle při omezení). Srovnávání dodatečných přínosů vůči dodatečným nákladům.  TYPY VÝROKŮ: ...]
+
+[Vygenerováno] Jde ti to skvele, pokracujeme. Uved priklad z praxe k statků služeb.
+[Z vaseho dokumentu: Studijní opora EKONOMIE Markéta Šumpíková Jana Marková 2025 EKONOMIE 2 Název: EKONOMIE Autorky: doc....]
+
+[Vygenerováno] Neboj, zvladnes to. Uved priklad z praxe k úroková míra.
+[Z vaseho dokumentu: na spotřebu. C YD Ca EKONOMIE 104 Obrázek 7.1: Keynesovská spotřební funkce (zdroj: vlastní zpracová...]

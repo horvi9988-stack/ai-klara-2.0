@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import tempfile
+import json
+import csv
+import io
 from pathlib import Path
 
 import streamlit as st
@@ -178,6 +181,12 @@ def main() -> None:
             if uploads_list:
                 st.subheader("Repository uploads")
                 selected = st.selectbox("Select file from uploads:", uploads_list, key="uploads_select")
+
+                # Controls for lesson generation and export
+                gen_count = st.number_input("Generated questions:", min_value=1, max_value=100, value=12, key="gen_count")
+                preview_len = st.number_input("Preview char limit:", min_value=50, max_value=1000, value=100, key="preview_len")
+                export_fmt = st.radio("Export format:", ["txt", "json", "csv"], index=0, key="export_fmt")
+
                 col_a, col_b = st.columns([2,1])
                 with col_a:
                     if st.button("Ingest selected file"):
@@ -204,22 +213,76 @@ def main() -> None:
                         sel_path = uploads_dir / selected
                         try:
                             chunks2 = ingest_file(sel_path)
-                            lesson = generate_lesson_from_sources(chunks2, subject=context.subject or 'ekonomie', level=context.level or 'zakladni', strictness=context.engine.strictness, n_generated=12)
-                            # save lesson
-                            lesson_file = uploads_dir / f"lesson_{selected}.txt"
-                            lesson_file.write_text("\n\n".join(lesson), encoding='utf-8')
+                            lesson = generate_lesson_from_sources(
+                                chunks2,
+                                subject=context.subject or "ekonomie",
+                                level=context.level or "zakladni",
+                                strictness=context.engine.strictness,
+                                n_generated=int(gen_count),
+                            )
+                            # save lesson in chosen format
+                            base_name = f"lesson_{selected}"
+                            if export_fmt == "txt":
+                                lesson_file = uploads_dir / f"{base_name}.txt"
+                                lesson_file.write_text("\n\n".join(lesson), encoding="utf-8")
+                                payload = None
+                            elif export_fmt == "json":
+                                lesson_file = uploads_dir / f"{base_name}.json"
+                                lesson_file.write_text(json.dumps(lesson, ensure_ascii=False, indent=2), encoding="utf-8")
+                                payload = json.dumps(lesson, ensure_ascii=False).encode("utf-8")
+                            else:  # csv
+                                lesson_file = uploads_dir / f"{base_name}.csv"
+                                with lesson_file.open("w", encoding="utf-8", newline="") as fh:
+                                    writer = csv.writer(fh)
+                                    for row in lesson:
+                                        writer.writerow([row])
+                                payload = lesson_file.read_bytes()
+
                             msg3 = f"✅ Generated lesson ({len(lesson)} items) and saved to {lesson_file.name}"
                             st.session_state.chat_history.append(("system", msg3))
                             st.session_state.last_response = msg3
                             st.success(msg3)
-                            # display first 20 items
-                            st.subheader('Generated lesson preview')
+                            # display preview truncated to preview_len
+                            st.subheader("Generated lesson preview")
                             for i, it in enumerate(lesson[:20], 1):
-                                st.write(f"{i}. {it}")
+                                display = it if len(it) <= int(preview_len) else it[: int(preview_len)] + "..."
+                                st.write(f"{i}. {display}")
+
+                            # provide download button for JSON/CSV or TXT
+                            try:
+                                if export_fmt == "txt":
+                                    with lesson_file.open("rb") as fh:
+                                        data = fh.read()
+                                    st.download_button("Download lesson (txt)", data, file_name=lesson_file.name)
+                                elif export_fmt == "json":
+                                    st.download_button("Download lesson (json)", payload, file_name=lesson_file.name)
+                                else:
+                                    st.download_button("Download lesson (csv)", payload, file_name=lesson_file.name)
+                            except Exception:
+                                pass
                         except Exception as e:
                             msg3 = f"❌ Error generating lesson: {str(e)}"
                             st.session_state.chat_history.append(("system", msg3))
                             st.error(msg3)
+
+                # Extra management actions
+                st.divider()
+                if st.button("Clear loaded sources"):
+                    context.sources.clear()
+                    st.success("Cleared loaded sources")
+                    st.rerun()
+
+                # Manage saved lessons
+                lesson_files = [f.name for f in uploads_dir.iterdir() if f.is_file() and f.name.startswith("lesson_")]
+                if lesson_files:
+                    st.subheader("Saved lessons")
+                    sel_les = st.selectbox("Select lesson to delete:", lesson_files, key="lesson_del_select")
+                    if st.button("Delete selected lesson"):
+                        try:
+                            (uploads_dir / sel_les).unlink()
+                            st.success(f"Deleted {sel_les}")
+                        except Exception as e:
+                            st.error(f"Error deleting: {e}")
 
             st.info(f"📄 {len(context.sources)} chunks loaded" if context.sources else "📄 No files loaded")
         

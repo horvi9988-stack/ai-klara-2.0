@@ -6,6 +6,7 @@ import random
 import re
 from collections import Counter
 from dataclasses import dataclass
+from typing import Iterable
 
 from app.core.local_sources import SourceChunk
 
@@ -343,6 +344,58 @@ def _extract_explicit_questions_from_text(text: str) -> list[str]:
     return out
 
 
+def _select_topics_from_sources(sources: Iterable[SourceChunk], k: int) -> list[str]:
+    """Select up to `k` topic phrases from sources using simple unigram+bigram scoring.
+
+    This is a lightweight keyphrase extractor that prefers frequent bigrams,
+    falling back to frequent unigrams. Does not require external libraries.
+    """
+    full = "\n\n".join(chunk.text for chunk in sources)
+    text = full.lower()
+
+    # Basic tokenization
+    tokens = [t for t in re.split(r"\W+", text) if t and len(t) > 2]
+
+    stopwords = {
+        "které", "který", "která", "tedy", "proto", "kterou", "kterým",
+        "může", "muset", "bude", "jsou", "je", "se", "s", "v", "na",
+        "do", "pro", "za", "od", "ale", "ne", "od", "tak", "co",
+    }
+
+    filtered = [t for t in tokens if t not in stopwords]
+
+    # unigrams frequency
+    uni_freq = Counter(filtered)
+
+    # bigrams frequency (adjacent tokens)
+    bigrams = []
+    for a, b in zip(filtered, filtered[1:]):
+        if a not in stopwords and b not in stopwords:
+            bigrams.append(f"{a} {b}")
+    bi_freq = Counter(bigrams)
+
+    # Score bigrams higher to prefer phrase topics
+    candidates = []
+    for phrase, score in bi_freq.most_common():
+        candidates.append((phrase, score * 2))
+    for term, score in uni_freq.most_common():
+        candidates.append((term, score))
+
+    seen = set()
+    topics: list[str] = []
+    for phrase, _ in candidates:
+        if phrase in seen:
+            continue
+        # prefer phrases with at least one alphabetic char
+        if not re.search(r"[a-zěščřžýáíéúůóťň]+", phrase):
+            continue
+        seen.add(phrase)
+        topics.append(phrase)
+        if len(topics) >= k:
+            break
+    return topics
+
+
 def generate_lesson_from_sources(
     sources: list[SourceChunk],
     subject: str | None = None,
@@ -363,15 +416,8 @@ def generate_lesson_from_sources(
 
     explicit = _extract_explicit_questions_from_text(full)
 
-    # Simple token frequency to pick topics for generated questions
-    tokens = [t for t in re.split(r"\W+", full.lower()) if len(t) > 4]
-    stopwords = {
-        "které", "který", "která", "tedy", "proto", "kterou", "kterým",
-        "může", "muset", "bude", "jsou", "je", "se", "s"
-    }
-    filtered = [t for t in tokens if t not in stopwords]
-    freq = Counter(filtered)
-    topics = [t for t, _ in freq.most_common(n_generated * 2)]
+    # Use improved topic selection to choose candidate topics
+    topics = _select_topics_from_sources(sources, max(6, n_generated * 2))
 
     generated = []
     used_topics = set()
