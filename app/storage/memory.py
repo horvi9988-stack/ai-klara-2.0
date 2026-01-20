@@ -23,6 +23,7 @@ class StudentMemory:
     lesson_history: list[LessonRecord] = field(default_factory=list)
     preferences: dict[str, object] = field(default_factory=dict)
     weakness_stats: dict[str, dict[str, dict[str, int]]] = field(default_factory=dict)
+    sources: list[str] = field(default_factory=list)
 
 
 def load_memory(path: Path) -> StudentMemory:
@@ -48,11 +49,21 @@ def load_memory(path: Path) -> StudentMemory:
         "llm_enabled": preferences.get("llm_enabled"),
         "llm_model": preferences.get("llm_model"),
         "voice_enabled": preferences.get("voice_enabled"),
+        "teacher_id": preferences.get("teacher_id"),
     }
     weakness_stats = data.get("weakness_stats", {})
     if not isinstance(weakness_stats, dict):
         weakness_stats = {}
-    return StudentMemory(lesson_history=history, preferences=preferences, weakness_stats=weakness_stats)
+    sources = data.get("sources", [])
+    if not isinstance(sources, list):
+        sources = []
+    sources = [source for source in sources if isinstance(source, str)]
+    return StudentMemory(
+        lesson_history=history,
+        preferences=preferences,
+        weakness_stats=weakness_stats,
+        sources=sources,
+    )
 
 
 def save_memory(path: Path, memory: StudentMemory) -> None:
@@ -60,6 +71,7 @@ def save_memory(path: Path, memory: StudentMemory) -> None:
         "lesson_history": [record.__dict__ for record in memory.lesson_history],
         "preferences": memory.preferences,
         "weakness_stats": memory.weakness_stats,
+        "sources": memory.sources,
     }
     path.write_text(json.dumps(payload, ensure_ascii=True, indent=2), encoding="utf-8")
 

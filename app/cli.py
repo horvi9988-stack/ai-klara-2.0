@@ -8,12 +8,13 @@ from pathlib import Path
 from app.core.evaluator import evaluate_answer
 from app.core.llm_question_engine import generate_llm_question
 from app.core.levels import normalize_level
-from app.core.local_sources import SourceChunk, ingest_file
+from app.core.local_sources import build_source_chunks, ingest_file, list_sources, suggest_topic
 from app.core.mock_llm import reply
 from app.core.question_engine import Question, generate_question
 from app.core.subjects import normalize_subject
 from app.core.session import LessonSession
 from app.core.state_machine import TeacherEngine
+from app.core.teachers import TeacherProfile, default_teacher, get_teacher_profile, list_teachers
 from app.core.voice import record_and_transcribe, speak_text, tts_dependency_message, voice_dependency_message
 from app.llm.ollama_client import DEFAULT_MODEL
 from app.storage.memory import (
@@ -37,13 +38,15 @@ class CliContext:
     session: LessonSession
     memory_path: Path
     persona_text: str
+    teacher_id: str
+    teacher_profile: TeacherProfile
     topic: str | None = None
     subject: str | None = None
     level: str | None = None
     llm_enabled: bool = False
     llm_model: str = DEFAULT_MODEL
     voice_enabled: bool = False
-    sources: list[SourceChunk] = field(default_factory=list)
+    sources: list[str] = field(default_factory=list)
 
 
 def handle_command(context: CliContext, command: str) -> str:
@@ -69,6 +72,7 @@ def handle_command(context: CliContext, command: str) -> str:
             f"model={context.llm_model} "
             f"voice={voice_state} "
             f"sources={len(context.sources)} "
+            f"teacher={context.teacher_id} "
             f"weakness={top_weakness}"
         )
 
@@ -81,6 +85,9 @@ def handle_command(context: CliContext, command: str) -> str:
                 "/topic <text>",
                 "/ingest <path>",
                 "/sources",
+                "/teacher list",
+                "/teacher set <id>",
+                "/teacher show",
                 "/ask",
                 "/answer <text> (alias /a)",
                 "/repeat",
@@ -265,18 +272,52 @@ def handle_command(context: CliContext, command: str) -> str:
         if not raw_path:
             return "Pouzij: /ingest <path>"
         try:
-            chunks = ingest_file(Path(raw_path))
+            source_id, chars_count = ingest_file(raw_path)
         except ValueError as exc:
             return str(exc)
-        if not chunks:
+        if chars_count <= 0:
             return "No text found in file."
-        context.sources.extend(chunks)
-        return f"Ingested {len(chunks)} chunks from {raw_path}"
+        context.sources.append(source_id)
+        memory = load_memory(context.memory_path)
+        memory.sources.append(source_id)
+        save_memory(context.memory_path, memory)
+        return f"Ingested {chars_count} chars from {raw_path} as {source_id}"
 
     if cmd == "/sources":
         if not context.sources:
             return "No sources loaded."
-        return f"Sources loaded: {len(context.sources)}"
+        source_entries = {entry["id"]: entry for entry in list_sources()}
+        lines = []
+        for source_id in context.sources:
+            entry = source_entries.get(source_id, {})
+            chars_count = entry.get("chars_count", 0)
+            lines.append(f"{source_id} ({chars_count} chars)")
+        return "\n".join(lines)
+
+    if cmd == "/teacher list":
+        profiles = list_teachers()
+        lines = [
+            f"{profile.id}: {profile.name} ({', '.join(profile.style_tags)})"
+            for profile in profiles
+        ]
+        return "\n".join(lines)
+
+    if cmd == "/teacher show":
+        profile = context.teacher_profile
+        tags = ", ".join(profile.style_tags)
+        return f"{profile.id}: {profile.name} ({tags}) - {profile.intro_line}"
+
+    if cmd.startswith("/teacher set "):
+        teacher_id = cmd.replace("/teacher set ", "", 1).strip()
+        profile = get_teacher_profile(teacher_id)
+        if not profile:
+            return "Unknown teacher id."
+        context.teacher_id = profile.id
+        context.teacher_profile = profile
+        memory = load_memory(context.memory_path)
+        memory.preferences["teacher_id"] = profile.id
+        save_memory(context.memory_path, memory)
+        return f"Teacher set to {profile.id}"
 
     if cmd == "/weak":
         if not context.subject:
@@ -326,7 +367,7 @@ def handle_command(context: CliContext, command: str) -> str:
 
 def _respond(context: CliContext, state: str, user_text: str) -> str:
     topic_hint = context.topic or user_text
-    return reply(
+    response = reply(
         context.persona_text,
         context.engine.strictness,
         state,
@@ -334,6 +375,10 @@ def _respond(context: CliContext, state: str, user_text: str) -> str:
         subject=context.subject,
         level=context.level,
     )
+    intro_line = context.teacher_profile.intro_line
+    if intro_line:
+        return f"{intro_line} {response}".strip()
+    return response
 
 
 def _ask_next_question(context: CliContext) -> str:
@@ -346,14 +391,18 @@ def _ask_next_question(context: CliContext) -> str:
 
 def _generate_question(context: CliContext) -> Question:
     memory = load_memory(context.memory_path)
-    prefer_easy = _should_prefer_easy(memory, context.subject, context.topic)
+    topic = context.topic
+    if not topic and context.sources:
+        topic = suggest_topic(context.sources)
+    prefer_easy = _should_prefer_easy(memory, context.subject, topic)
     if context.llm_enabled:
+        source_chunks = build_source_chunks(context.sources)
         llm_question = generate_llm_question(
             context.subject,
             context.level,
-            context.topic,
+            topic,
             context.engine.strictness,
-            sources=context.sources,
+            sources=source_chunks,
             model=context.llm_model,
         )
         if llm_question:
@@ -361,7 +410,7 @@ def _generate_question(context: CliContext) -> Question:
     return generate_question(
         context.subject,
         context.level,
-        context.topic,
+        topic,
         context.engine.strictness,
         prefer_easy=prefer_easy,
     )
@@ -453,17 +502,22 @@ def run_cli() -> None:
     saved_llm_enabled = prefs.get("llm_enabled")
     saved_llm_model = prefs.get("llm_model")
     saved_voice_enabled = prefs.get("voice_enabled")
+    saved_teacher_id = prefs.get("teacher_id")
+    saved_teacher_profile = get_teacher_profile(saved_teacher_id) or default_teacher()
     context = CliContext(
         engine=TeacherEngine(),
         session=LessonSession(),
         memory_path=MEMORY_PATH,
         persona_text=persona_text,
+        teacher_id=saved_teacher_profile.id,
+        teacher_profile=saved_teacher_profile,
         topic=saved_topic if saved_topic else None,
         subject=saved_subject if saved_subject else None,
         level=saved_level if saved_level else None,
         llm_enabled=True if saved_llm_enabled is True else False,
         llm_model=saved_llm_model if isinstance(saved_llm_model, str) and saved_llm_model else DEFAULT_MODEL,
         voice_enabled=True if saved_voice_enabled is True else False,
+        sources=memory.sources if memory.sources else [],
     )
 
     # nacti ulozeny topic z pameti (persistuje po restartu)
