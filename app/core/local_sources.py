@@ -25,9 +25,14 @@ def ingest_file(path: Path, *, chunk_size: int = 400, overlap: int = 40) -> list
     if suffix == ".pdf":
         _ensure_dependency("pypdf", "pypdf")
         pdf = importlib.import_module("pypdf")
-        reader = pdf.PdfReader(str(path))
-        pages = [page.extract_text() or "" for page in reader.pages]
-        text = "\n".join(pages)
+        try:
+            reader = pdf.PdfReader(str(path))
+            pages = [page.extract_text() or "" for page in reader.pages]
+            text = "\n".join(pages)
+        except Exception:
+            # Fallback: some uploaded files may be plain text saved with .pdf extension
+            # or malformed PDFs; try to read as text to still extract content.
+            text = path.read_text(encoding="utf-8", errors="ignore")
         return _chunk_text(text, source=str(path), chunk_size=chunk_size, overlap=overlap)
     if suffix == ".docx":
         _ensure_dependency("docx", "python-docx")

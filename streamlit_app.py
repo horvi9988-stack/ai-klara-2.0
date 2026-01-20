@@ -169,6 +169,34 @@ def main() -> None:
                 finally:
                     Path(tmp_path).unlink()
             
+            # Allow ingesting files already present in the workspace `uploads/` folder
+            uploads_dir = Path(__file__).resolve().parent / "uploads"
+            uploads_list = []
+            if uploads_dir.exists():
+                uploads_list = [f.name for f in sorted(uploads_dir.iterdir()) if f.is_file()]
+
+            if uploads_list:
+                st.subheader("Repository uploads")
+                selected = st.selectbox("Select file from uploads:", uploads_list, key="uploads_select")
+                if st.button("Ingest selected file"):
+                    sel_path = uploads_dir / selected
+                    try:
+                        chunks2 = ingest_file(sel_path)
+                        if chunks2:
+                            context.sources.extend(chunks2)
+                            msg2 = f"✅ Ingested {selected}: {len(chunks2)} chunks"
+                            st.session_state.chat_history.append(("system", msg2))
+                            st.session_state.last_response = msg2
+                            st.success(msg2)
+                        else:
+                            msg2 = "❌ No text found in file"
+                            st.session_state.chat_history.append(("system", msg2))
+                            st.error(msg2)
+                    except Exception as e:
+                        msg2 = f"❌ Error: {str(e)}"
+                        st.session_state.chat_history.append(("system", msg2))
+                        st.error(msg2)
+
             st.info(f"📄 {len(context.sources)} chunks loaded" if context.sources else "📄 No files loaded")
         
         with tab3:
