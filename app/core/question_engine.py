@@ -249,6 +249,7 @@ def generate_question(
     *,
     prefer_easy: bool = False,
     sources: list[SourceChunk] | None = None,
+    preview_len: int = 300,
 ) -> Question:
     normalized_subject = subject or "obecne"
     normalized_level = _normalize_level(level)
@@ -268,14 +269,9 @@ def generate_question(
     text = str(selected["text"]).format(topic=topic_text)
     
     # If sources available, retrieve relevant context and add context hint
-    context_hint = ""
     if sources:
-        from app.core.local_sources import retrieve_chunks
-        retrieved = retrieve_chunks(sources, f"{normalized_subject} {topic_text}", limit=1)
-        if retrieved:
-            chunk_preview = retrieved[0].text[:100].replace("\n", " ")
-            context_hint = f"\n[Z vaseho dokumentu: {chunk_preview}...]"
-            text = text + context_hint
+        query = f"{normalized_subject} {topic_text} {normalized_level}"
+        text = _attach_document_preview(text, sources, query, preview_len)
     
     keywords = [str(keyword).format(topic=topic_text) for keyword in selected.get("keywords", [])]
     meta = QuestionMeta(
@@ -344,6 +340,21 @@ def _extract_explicit_questions_from_text(text: str) -> list[str]:
     return out
 
 
+@dataclass
+class LessonAnalysis:
+    topics: list[str]
+    explicit_questions: list[str]
+
+
+def analyze_sources(sources: Iterable[SourceChunk], *, topic_k: int = 6) -> LessonAnalysis:
+    if not sources:
+        return LessonAnalysis(topics=[], explicit_questions=[])
+    full = "\n\n".join(chunk.text for chunk in sources)
+    explicit = _extract_explicit_questions_from_text(full)
+    topics = _select_topics_from_sources(sources, topic_k)
+    return LessonAnalysis(topics=topics, explicit_questions=explicit)
+
+
 def _select_topics_from_sources(sources: Iterable[SourceChunk], k: int) -> list[str]:
     """Select up to `k` topic phrases from sources using simple unigram+bigram scoring.
 
@@ -402,39 +413,119 @@ def generate_lesson_from_sources(
     level: str | None = None,
     strictness: int = 4,
     *,
-    n_generated: int = 8,
-) -> list[str]:
+    n_total: int = 30,
+    preview_len: int = 300,
+    per_topic_min: int = 3,
+    return_meta: bool = False,
+) -> list[str] | tuple[list[str], LessonAnalysis]:
     """Create a lesson: extract explicit questions from sources and generate additional ones.
 
     Returns a list of question texts (strings) combining extracted and generated items.
     """
     if not sources:
-        return []
+        return [] if not return_meta else ([], LessonAnalysis(topics=[], explicit_questions=[]))
 
-    # Combine all text
-    full = "\n\n".join(chunk.text for chunk in sources)
+    subject_label = subject or "obecne"
+    level_label = _normalize_level(level)
+    topic_limit = max(1, min(12, n_total // max(1, per_topic_min)))
+    analysis = analyze_sources(sources, topic_k=topic_limit)
 
-    explicit = _extract_explicit_questions_from_text(full)
+    explicit = analysis.explicit_questions
+    topics = analysis.topics
 
-    # Use improved topic selection to choose candidate topics
-    topics = _select_topics_from_sources(sources, max(6, n_generated * 2))
+    combined: list[str] = [f"[From document] {q}" for q in explicit]
+    target_count = max(n_total, len(combined))
 
-    generated = []
-    used_topics = set()
-    for t in topics:
-        if len(generated) >= n_generated:
-            break
-        if t in used_topics:
-            continue
-        used_topics.add(t)
-        q = generate_question(subject or "obecne", level or "zakladni", t, strictness, sources=sources)
-        generated.append(q.text)
+    generated: list[str] = []
+    for topic in topics:
+        variants = _topic_question_variants(topic, subject_label)
+        for base in variants[: max(1, per_topic_min)]:
+            question = _attach_document_preview(
+                base,
+                sources,
+                f"{subject_label} {topic} {level_label}",
+                preview_len,
+            )
+            generated.append(f"[Generated] {question}")
 
-    # Merge explicit (from doc) first, then generated ones
-    combined: list[str] = []
-    for q in explicit:
-        combined.append(f"[Z dokumentu] {q}")
-    for q in generated:
-        combined.append(f"[Vygenerováno] {q}")
+    if len(combined) + len(generated) < target_count:
+        for topic in topics:
+            variants = _topic_question_variants(topic, subject_label)
+            for base in variants[max(1, per_topic_min) :]:
+                if len(combined) + len(generated) >= target_count:
+                    break
+                question = _attach_document_preview(
+                    base,
+                    sources,
+                    f"{subject_label} {topic} {level_label}",
+                    preview_len,
+                )
+                generated.append(f"[Generated] {question}")
+            if len(combined) + len(generated) >= target_count:
+                break
 
+    combined.extend(generated)
+    combined = _dedupe_questions(combined)
+    if len(combined) > target_count:
+        combined = combined[:target_count]
+    if return_meta:
+        return combined, analysis
     return combined
+
+
+def _attach_document_preview(
+    question: str,
+    sources: list[SourceChunk],
+    query: str,
+    preview_len: int,
+) -> str:
+    if not sources:
+        return question
+    from app.core.local_sources import retrieve_chunks
+
+    retrieved = retrieve_chunks(sources, query, limit=1)
+    if not retrieved:
+        return question
+    preview = _clip_text(retrieved[0].text, preview_len)
+    if not preview:
+        return question
+    return f"{question}\n[From document: {preview}]"
+
+
+def _clip_text(text: str, limit: int) -> str:
+    cleaned = text.replace("\n", " ").strip()
+    if limit <= 0:
+        return ""
+    if len(cleaned) <= limit:
+        return cleaned
+    return cleaned[:limit].rstrip() + "..."
+
+
+def _topic_question_variants(topic: str, subject: str) -> list[str]:
+    variants = [
+        f"Define the key idea of {topic}.",
+        f"Give one real-world example of {topic}.",
+        f"Compare {topic} with a related concept.",
+        f"Explain a cause and effect related to {topic}.",
+    ]
+    if subject == "matematika" or any(char.isdigit() for char in topic):
+        variants.append(f"Calculate a simple example involving {topic}.")
+    return variants
+
+
+def _dedupe_questions(items: list[str]) -> list[str]:
+    seen: set[str] = set()
+    deduped: list[str] = []
+    for item in items:
+        key = _normalize_question(item)
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(item)
+    return deduped
+
+
+def _normalize_question(text: str) -> str:
+    lowered = text.lower()
+    normalized = re.sub(r"[^a-z0-9]+", " ", lowered)
+    return " ".join(normalized.split())

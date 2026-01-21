@@ -12,13 +12,22 @@ def test_generate_lesson_basic():
     )
     chunks = [SourceChunk(text=text, source="test"), SourceChunk(text="dalsi text o trhu a poptavce", source="test")]
 
-    lesson = generate_lesson_from_sources(chunks, subject="ekonomie", level="zakladni", strictness=3, n_generated=5)
+    lesson = generate_lesson_from_sources(
+        chunks,
+        subject="ekonomie",
+        level="zakladni",
+        strictness=3,
+        n_total=8,
+        preview_len=120,
+    )
     assert isinstance(lesson, list)
-    assert len(lesson) > 0
+    assert len(lesson) >= 8
     # Should contain at least one explicit and one generated marker
-    assert any(item.startswith("[Z dokumentu]") for item in lesson)
-    assert any(item.startswith("[Vygenerováno]") for item in lesson)
+    assert any(item.startswith("[From document]") for item in lesson)
+    assert any(item.startswith("[Generated]") for item in lesson)
+    # Should include a document preview for generated questions
+    assert any("[From document:" in item for item in lesson)
 
 
 def test_generate_lesson_no_sources():
-    assert generate_lesson_from_sources([], subject="ekonomie", level="zakladni", strictness=3, n_generated=3) == []
+    assert generate_lesson_from_sources([], subject="ekonomie", level="zakladni", strictness=3, n_total=3) == []

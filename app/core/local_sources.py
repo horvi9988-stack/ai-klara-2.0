@@ -2,11 +2,15 @@ from __future__ import annotations
 
 """Local document ingestion and simple chunk retrieval."""
 
+import hashlib
 import importlib
 import importlib.util
+import json
 import re
 from dataclasses import dataclass
 from pathlib import Path
+
+from app.core import retrieval
 
 
 @dataclass
@@ -47,16 +51,16 @@ def ingest_file(path: Path, *, chunk_size: int = 400, overlap: int = 40) -> list
 def retrieve_chunks(chunks: list[SourceChunk], query: str, *, limit: int = 3) -> list[SourceChunk]:
     if not chunks:
         return []
-    tokens = _tokenize(query)
-    if not tokens:
-        return chunks[:limit]
-    scored: list[tuple[int, SourceChunk]] = []
-    for chunk in chunks:
-        chunk_text = chunk.text.lower()
-        score = sum(1 for token in tokens if token in chunk_text)
-        scored.append((score, chunk))
-    scored.sort(key=lambda item: item[0], reverse=True)
-    return [chunk for score, chunk in scored if score > 0][:limit] or chunks[:limit]
+    cache_context = _get_cache_context(chunks)
+    if cache_context and cache_context.cache_path.exists():
+        cached = _load_cached_index(cache_context, chunks)
+        if cached:
+            return retrieval.search(cached, query, k=limit)
+    results = _simple_retrieve(chunks, query, limit=limit)
+    if cache_context:
+        index = retrieval.build_index(chunks)
+        _save_cached_index(cache_context, index)
+    return results
 
 
 def _ensure_dependency(module_name: str, package_name: str) -> None:
@@ -83,3 +87,87 @@ def _chunk_text(text: str, *, source: str, chunk_size: int, overlap: int) -> lis
 def _tokenize(text: str) -> list[str]:
     tokens = [token for token in re.split(r"\W+", text.lower()) if len(token) > 2]
     return tokens
+
+
+def _simple_retrieve(chunks: list[SourceChunk], query: str, *, limit: int) -> list[SourceChunk]:
+    tokens = _tokenize(query)
+    if not tokens:
+        return chunks[:limit]
+    scored: list[tuple[int, SourceChunk]] = []
+    for chunk in chunks:
+        chunk_text = chunk.text.lower()
+        score = sum(1 for token in tokens if token in chunk_text)
+        scored.append((score, chunk))
+    scored.sort(key=lambda item: item[0], reverse=True)
+    return [chunk for score, chunk in scored if score > 0][:limit] or chunks[:limit]
+
+
+def _get_cache_context(chunks: list[SourceChunk]) -> _CacheContext | None:
+    if not chunks:
+        return None
+    source = chunks[0].source
+    if any(chunk.source != source for chunk in chunks):
+        return None
+    source_path = Path(source)
+    if not source_path.exists():
+        return None
+    file_hash = _hash_file(source_path)
+    chunk_hashes = [_hash_text(chunk.text) for chunk in chunks]
+    cache_dir = _index_dir()
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    chunk_list_hash = _hash_text("".join(chunk_hashes))
+    cache_path = cache_dir / f"{file_hash}_{chunk_list_hash}.json"
+    return _CacheContext(
+        source_path=source_path,
+        file_hash=file_hash,
+        chunk_hashes=chunk_hashes,
+        cache_path=cache_path,
+    )
+
+
+def _load_cached_index(context: _CacheContext, chunks: list[SourceChunk]) -> retrieval.Index | None:
+    try:
+        payload = json.loads(context.cache_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    if payload.get("file_hash") != context.file_hash:
+        return None
+    if payload.get("chunk_hashes") != context.chunk_hashes:
+        return None
+    data = payload.get("index")
+    if not isinstance(data, dict):
+        return None
+    return retrieval.index_from_cache(data, chunks)
+
+
+def _save_cached_index(context: _CacheContext, index: retrieval.Index) -> None:
+    payload = {
+        "file_hash": context.file_hash,
+        "chunk_hashes": context.chunk_hashes,
+        "index": retrieval.index_to_cache(index),
+    }
+    context.cache_path.write_text(json.dumps(payload), encoding="utf-8")
+
+
+def _index_dir() -> Path:
+    return Path(__file__).resolve().parents[2] / "uploads" / ".index"
+
+
+def _hash_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as fh:
+        for chunk in iter(lambda: fh.read(65536), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _hash_text(text: str) -> str:
+    return hashlib.sha256(text.encode("utf-8", errors="ignore")).hexdigest()
+
+
+@dataclass(frozen=True)
+class _CacheContext:
+    source_path: Path
+    file_hash: str
+    chunk_hashes: list[str]
+    cache_path: Path

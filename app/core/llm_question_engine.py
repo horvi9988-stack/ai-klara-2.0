@@ -15,6 +15,7 @@ def generate_llm_question(
     *,
     sources: list[SourceChunk],
     model: str,
+    preview_len: int = 300,
 ) -> Question | None:
     subject_label = subject or "obecne"
     level_label = level or "zakladni"
@@ -25,6 +26,7 @@ def generate_llm_question(
     cleaned = _extract_question(response)
     if not cleaned or _looks_unavailable(response):
         return None
+    cleaned = _attach_document_preview(cleaned, retrieved, preview_len)
     meta = QuestionMeta(
         subject=subject_label,
         level=level_label,
@@ -79,3 +81,25 @@ def _looks_unavailable(text: str) -> bool:
         or "ollama request timed out" in lowered
         or lowered.startswith("ollama error")
     )
+
+
+def _attach_document_preview(
+    question: str,
+    retrieved: list[SourceChunk],
+    preview_len: int,
+) -> str:
+    if not retrieved:
+        return question
+    preview = _clip_text(retrieved[0].text, preview_len)
+    if not preview:
+        return question
+    return f"{question}\n[From document: {preview}]"
+
+
+def _clip_text(text: str, limit: int) -> str:
+    cleaned = text.replace("\n", " ").strip()
+    if limit <= 0:
+        return ""
+    if len(cleaned) <= limit:
+        return cleaned
+    return cleaned[:limit].rstrip() + "..."

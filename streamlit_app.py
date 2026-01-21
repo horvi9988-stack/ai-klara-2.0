@@ -183,8 +183,22 @@ def main() -> None:
                 selected = st.selectbox("Select file from uploads:", uploads_list, key="uploads_select")
 
                 # Controls for lesson generation and export
-                gen_count = st.number_input("Generated questions:", min_value=1, max_value=100, value=12, key="gen_count")
-                preview_len = st.number_input("Preview char limit:", min_value=50, max_value=1000, value=100, key="preview_len")
+                total_questions = st.slider(
+                    "Total questions:",
+                    min_value=10,
+                    max_value=60,
+                    value=30,
+                    step=1,
+                    key="total_questions",
+                )
+                preview_len = st.slider(
+                    "Preview char limit:",
+                    min_value=200,
+                    max_value=800,
+                    value=300,
+                    step=10,
+                    key="preview_len",
+                )
                 export_fmt = st.radio("Export format:", ["txt", "json", "csv"], index=0, key="export_fmt")
 
                 col_a, col_b = st.columns([2,1])
@@ -213,12 +227,14 @@ def main() -> None:
                         sel_path = uploads_dir / selected
                         try:
                             chunks2 = ingest_file(sel_path)
-                            lesson = generate_lesson_from_sources(
+                            lesson, analysis = generate_lesson_from_sources(
                                 chunks2,
                                 subject=context.subject or "ekonomie",
                                 level=context.level or "zakladni",
                                 strictness=context.engine.strictness,
-                                n_generated=int(gen_count),
+                                n_total=int(total_questions),
+                                preview_len=int(preview_len),
+                                return_meta=True,
                             )
                             # save lesson in chosen format
                             base_name = f"lesson_{selected}"
@@ -242,6 +258,11 @@ def main() -> None:
                             st.session_state.chat_history.append(("system", msg3))
                             st.session_state.last_response = msg3
                             st.success(msg3)
+                            if analysis.topics:
+                                topics_label = ", ".join(analysis.topics[:5])
+                                st.write(f"Top topics: {topics_label}")
+                            st.write(f"Explicit questions: {len(analysis.explicit_questions)}")
+                            st.write(f"Final lesson count: {len(lesson)}")
                             # display preview truncated to preview_len
                             st.subheader("Generated lesson preview")
                             for i, it in enumerate(lesson[:20], 1):
