@@ -2,10 +2,8 @@
 
 from __future__ import annotations
 
-import tempfile
-import json
-import csv
-import io
+import html
+from collections import defaultdict
 from pathlib import Path
 
 import streamlit as st
@@ -14,7 +12,7 @@ from app.cli import CliContext, handle_command
 from app.core.session import LessonSession
 from app.core.state_machine import TeacherEngine
 from app.llm.ollama_client import DEFAULT_MODEL
-from app.storage.memory import load_memory, save_memory
+from app.storage.memory import load_memory
 from app.core.local_sources import ingest_file
 
 
@@ -64,6 +62,74 @@ def init_session_state() -> None:
         st.session_state.context = context
         st.session_state.chat_history = []
         st.session_state.last_response = None
+        st.session_state.active_citation_id = None
+        st.session_state.selected_chunk_ids = set()
+        st.session_state.material_search_results = []
+
+
+def apply_theme() -> None:
+    """Apply custom UI styling."""
+    st.markdown(
+        """
+        <style>
+            .main {
+                background: #F8FAFC;
+            }
+            .app-title {
+                font-weight: 700;
+                letter-spacing: -0.02em;
+                color: #111827;
+            }
+            .panel-card {
+                background: #FFFFFF;
+                border: 1px solid rgba(15, 23, 42, 0.08);
+                border-radius: 24px;
+                padding: 18px 20px;
+                box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
+            }
+            .panel-muted {
+                color: #64748B;
+                font-size: 0.9rem;
+            }
+            .chip {
+                display: inline-flex;
+                align-items: center;
+                gap: 6px;
+                padding: 6px 12px;
+                margin-right: 8px;
+                border-radius: 999px;
+                border: 1px solid rgba(15, 23, 42, 0.2);
+                background: #F1F5F9;
+                color: #111827;
+                font-size: 0.85rem;
+                font-weight: 600;
+            }
+            .chat-bubble {
+                padding: 12px 16px;
+                border-radius: 20px;
+                margin-bottom: 8px;
+                line-height: 1.5;
+            }
+            .chat-user {
+                background: #111827;
+                color: #FFFFFF;
+            }
+            .chat-assistant {
+                background: #FFFFFF;
+                border: 1px solid rgba(15, 23, 42, 0.08);
+                color: #111827;
+            }
+            .section-title {
+                font-weight: 600;
+                color: #111827;
+            }
+            .ios-segmented label {
+                font-weight: 600;
+            }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
 
 
 def format_state_display(context: CliContext) -> str:
@@ -83,248 +149,317 @@ def format_state_display(context: CliContext) -> str:
     )
 
 
-def main() -> None:
-    """Main Streamlit app."""
-    init_session_state()
-    context = st.session_state.context
-    
-    st.title("📚 Klara AI - Tutoring System")
-    
-    # Sidebar
-    with st.sidebar:
-        st.header("Configuration")
-        
-        tab1, tab2, tab3 = st.tabs(["Settings", "Upload", "History"])
-        
-        with tab1:
-            st.subheader("Mode")
-            mode = st.radio(
-                "Select mode:",
-                ["teacher", "assistant"],
-                index=0 if context.mode == "teacher" else 1,
-                key="mode_selector"
-            )
-            if mode != context.mode:
-                response = handle_command(context, f"/mode {mode}")
+def render_card(title: str, body: str, footer: str | None = None) -> None:
+    footer_html = f"<div class='panel-muted'>{footer}</div>" if footer else ""
+    st.markdown(
+        f"""
+        <div class="panel-card">
+            <div class="section-title">{html.escape(title)}</div>
+            <div style="margin-top:8px;">{body}</div>
+            {footer_html}
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def chunk_catalog(context: CliContext) -> list[dict[str, str]]:
+    catalog = []
+    for index, chunk in enumerate(context.sources, 1):
+        source_name = chunk.source_file
+        label = f"{source_name} · p.{chunk.page_num} · chunk {index}"
+        catalog.append(
+            {
+                "id": chunk.id,
+                "label": label,
+                "text": chunk.text,
+                "source": source_name,
+                "page": chunk.page_num,
+            }
+        )
+    return catalog
+
+
+def render_source_chips(context: CliContext, chunks: list[dict[str, str]]) -> None:
+    if not chunks:
+        st.markdown("<span class='panel-muted'>Bez citací (zatím žádné zdroje).</span>", unsafe_allow_html=True)
+        return
+    columns = st.columns(len(chunks))
+    for column, chip in zip(columns, chunks):
+        with column:
+            if st.button(f"📄 {chip['source']} · p.{chip['page']}", key=f"chip_{chip['id']}"):
+                st.session_state.active_citation_id = chip["id"]
+    catalog = chunk_catalog(context)
+    active = next((chip for chip in catalog if chip["id"] == st.session_state.active_citation_id), None)
+    if active:
+        with st.expander(f"Citace: {active['label']}", expanded=True):
+            st.write(active["text"])
+            if st.button("Použít jako kontext", key=f"use_context_{active['id']}"):
+                st.session_state.selected_chunk_ids = {active["id"]}
+                context.selected_sources = [
+                    chunk for chunk in context.sources if chunk.id in st.session_state.selected_chunk_ids
+                ]
+                response = f"✅ Kontext přidán: {active['label']}"
                 st.session_state.chat_history.append(("system", response))
                 st.session_state.last_response = response
-            
-            st.subheader("Subject & Level")
-            col1, col2 = st.columns(2)
-            with col1:
-                subject = st.text_input("Subject:", value=context.subject or "", key="subject_input")
-                if subject and subject != (context.subject or ""):
-                    response = handle_command(context, f"/subject {subject}")
-                    st.session_state.chat_history.append(("system", response))
-                    st.session_state.last_response = response
-            
-            with col2:
-                level = st.text_input("Level:", value=context.level or "", key="level_input")
-                if level and level != (context.level or ""):
-                    response = handle_command(context, f"/level {level}")
-                    st.session_state.chat_history.append(("system", response))
-                    st.session_state.last_response = response
-            
-            st.subheader("Topic")
-            topic = st.text_area("Topic/Theme:", value=context.topic or "", key="topic_input", height=80)
-            if topic and topic != (context.topic or ""):
-                response = handle_command(context, f"/topic {topic}")
-                st.session_state.chat_history.append(("system", response))
-                st.session_state.last_response = response
-            
-            st.subheader("LLM Settings")
-            llm_enabled = st.checkbox("Enable LLM", value=context.llm_enabled, key="llm_checkbox")
-            if llm_enabled != context.llm_enabled:
-                cmd = "/llm on" if llm_enabled else "/llm off"
-                response = handle_command(context, cmd)
-                st.session_state.chat_history.append(("system", response))
-        
-        with tab2:
-            st.subheader("Upload Files")
-            uploaded_file = st.file_uploader(
-                "Upload script/textbook (PDF, DOCX, TXT):",
-                type=["pdf", "docx", "txt"],
-                key="file_uploader"
-            )
-            
-            if uploaded_file is not None:
-                # Save to temp file and ingest
-                with tempfile.NamedTemporaryFile(delete=False, suffix=Path(uploaded_file.name).suffix) as tmp:
-                    tmp.write(uploaded_file.getbuffer())
-                    tmp_path = tmp.name
-                
-                try:
-                    chunks = ingest_file(Path(tmp_path))
-                    if chunks:
-                        context.sources.extend(chunks)
-                        msg = f"✅ Uploaded {uploaded_file.name}: {len(chunks)} chunks ingested"
-                        st.session_state.chat_history.append(("system", msg))
-                        st.session_state.last_response = msg
-                        st.success(msg)
-                    else:
-                        msg = "❌ No text found in file"
-                        st.session_state.chat_history.append(("system", msg))
-                        st.error(msg)
-                except Exception as e:
-                    msg = f"❌ Error: {str(e)}"
+                st.rerun()
+
+
+def _match_cited_chunks(context: CliContext, message: str) -> list[dict[str, str]]:
+    import re
+
+    citations = re.findall(r"\\[Source: ([^\\]]+?) p\\.(\\d+)\\]", message)
+    if not citations:
+        return []
+    matched: list[dict[str, str]] = []
+    catalog = chunk_catalog(context)
+    for source, page in citations:
+        for chunk in catalog:
+            if chunk["source"] == source and str(chunk["page"]) == page:
+                matched.append(chunk)
+                break
+    return matched
+
+
+def render_chat_message(role: str, message: str) -> None:
+    escaped = html.escape(message)
+    css_class = "chat-user" if role == "user" else "chat-assistant"
+    st.markdown(
+        f"<div class='chat-bubble {css_class}'>{escaped}</div>",
+        unsafe_allow_html=True,
+    )
+
+
+def render_dashboard(context: CliContext) -> None:
+    st.markdown("### Dashboard")
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        render_card(
+            "Dnes",
+            "<strong>1 doporučená lekce</strong><br/>Krátký warm‑up k tématu.",
+            "Tip: držet tempo 25–30 min.",
+        )
+    with col2:
+        render_card(
+            "Slabiny",
+            "<strong>2 okruhy</strong><br/>Makroekonomie · Elasticita.",
+            "Poslední kontrola: dnes ráno.",
+        )
+    with col3:
+        render_card(
+            "Deadline",
+            "<strong>3 úkoly</strong><br/>Seminářka · Test · Čtení.",
+            "Auto‑plán dne dostupný v Tasks.",
+        )
+    st.markdown("### Přehled")
+    col4, col5 = st.columns([2, 1])
+    with col4:
+        render_card(
+            "Doporučená lekce",
+            "Prohloubit vztah Ingestace → Chunk → Citace a jejich roli v Tutor Mode.",
+            "Naposledy: včera 18:20.",
+        )
+    with col5:
+        render_card(
+            "Režim",
+            f"<strong>{context.mode.title()}</strong><br/>Přísnost: {context.engine.strictness}/5",
+            "Přepni režim v profilu.",
+        )
+
+
+def render_materials(context: CliContext) -> None:
+    st.markdown("### Materials")
+    st.markdown("<div class='panel-muted'>Lokální soubory a ingestace (offline).</div>", unsafe_allow_html=True)
+
+    uploads_dir = Path(__file__).resolve().parent / "uploads"
+    uploads_dir.mkdir(exist_ok=True)
+
+    col1, col2 = st.columns([2, 1])
+    with col1:
+        uploaded_file = st.file_uploader(
+            "Přidat dokument (PDF, DOCX, TXT)",
+            type=["pdf", "docx", "txt"],
+            key="file_uploader_main",
+        )
+        if uploaded_file is not None:
+            target_path = uploads_dir / uploaded_file.name
+            with target_path.open("wb") as handle:
+                handle.write(uploaded_file.getbuffer())
+            try:
+                chunks = ingest_file(target_path)
+                if chunks:
+                    context.sources.extend(chunks)
+                    msg = f"✅ Nahráno {uploaded_file.name}: {len(chunks)} chunků"
+                    st.session_state.chat_history.append(("system", msg))
+                    st.session_state.last_response = msg
+                    st.success(msg)
+                else:
+                    msg = "❌ Soubor neobsahuje čitelný text."
                     st.session_state.chat_history.append(("system", msg))
                     st.error(msg)
-                finally:
-                    Path(tmp_path).unlink()
-            
-            # Allow ingesting files already present in the workspace `uploads/` folder
-            uploads_dir = Path(__file__).resolve().parent / "uploads"
-            uploads_list = []
-            if uploads_dir.exists():
-                uploads_list = [f.name for f in sorted(uploads_dir.iterdir()) if f.is_file()]
+            except Exception as exc:
+                msg = f"❌ Chyba ingestace: {exc}"
+                st.session_state.chat_history.append(("system", msg))
+                st.error(msg)
+    with col2:
+        if st.button("Vyčistit nahrané zdroje"):
+            context.sources.clear()
+            st.success("Zdrojové chunky vyčištěny.")
 
-            if uploads_list:
-                st.subheader("Repository uploads")
-                selected = st.selectbox("Select file from uploads:", uploads_list, key="uploads_select")
+    st.markdown("#### Lokální soubory")
+    files = [f for f in uploads_dir.iterdir() if f.is_file() and not f.name.startswith("lesson_")]
+    if files:
+        selected_file = st.selectbox("Vybrat soubor k ingestaci:", [f.name for f in files], key="uploads_select")
+        if st.button("Ingestovat vybraný soubor"):
+            sel_path = uploads_dir / selected_file
+            try:
+                chunks = ingest_file(sel_path)
+                if chunks:
+                    context.sources.extend(chunks)
+                    msg = f"✅ Ingestováno {selected_file}: {len(chunks)} chunků"
+                    st.session_state.chat_history.append(("system", msg))
+                    st.session_state.last_response = msg
+                    st.success(msg)
+                else:
+                    st.error("❌ Soubor neobsahuje čitelný text.")
+            except Exception as exc:
+                st.error(f"❌ Chyba ingestace: {exc}")
+        for file in files:
+            render_card(
+                file.name,
+                f"Velikost: {file.stat().st_size // 1024} KB",
+                "Připraveno k ingestaci.",
+            )
+    else:
+        st.info("Zatím nejsou žádné lokální soubory.")
 
-                # Controls for lesson generation and export
-                total_questions = st.slider(
-                    "Total questions:",
-                    min_value=10,
-                    max_value=60,
-                    value=30,
-                    step=1,
-                    key="total_questions",
-                )
-                preview_len = st.slider(
-                    "Preview char limit:",
-                    min_value=200,
-                    max_value=800,
-                    value=300,
-                    step=10,
-                    key="preview_len",
-                )
-                export_fmt = st.radio("Export format:", ["txt", "json", "csv"], index=0, key="export_fmt")
+    st.markdown("#### Ingestované chunky")
+    if context.sources:
+        grouped: dict[str, int] = defaultdict(int)
+        for chunk in context.sources:
+            grouped[chunk.source_file] += 1
+        for source, count in grouped.items():
+            render_card(source, f"{count} chunků", "Metadata: source + index.")
+    else:
+        st.info("Žádné chunky nejsou načtené.")
 
-                col_a, col_b = st.columns([2,1])
-                with col_a:
-                    if st.button("Ingest selected file"):
-                        sel_path = uploads_dir / selected
-                        try:
-                            chunks2 = ingest_file(sel_path)
-                            if chunks2:
-                                context.sources.extend(chunks2)
-                                msg2 = f"✅ Ingested {selected}: {len(chunks2)} chunks"
-                                st.session_state.chat_history.append(("system", msg2))
-                                st.session_state.last_response = msg2
-                                st.success(msg2)
-                            else:
-                                msg2 = "❌ No text found in file"
-                                st.session_state.chat_history.append(("system", msg2))
-                                st.error(msg2)
-                        except Exception as e:
-                            msg2 = f"❌ Error: {str(e)}"
-                            st.session_state.chat_history.append(("system", msg2))
-                            st.error(msg2)
-                with col_b:
-                    if st.button("Generate lesson from selected"):
-                        from app.core.question_engine import generate_lesson_from_sources
-                        sel_path = uploads_dir / selected
-                        try:
-                            chunks2 = ingest_file(sel_path)
-                            lesson, analysis = generate_lesson_from_sources(
-                                chunks2,
-                                subject=context.subject or "ekonomie",
-                                level=context.level or "zakladni",
-                                strictness=context.engine.strictness,
-                                n_total=int(total_questions),
-                                preview_len=int(preview_len),
-                                return_meta=True,
-                            )
-                            # save lesson in chosen format
-                            base_name = f"lesson_{selected}"
-                            if export_fmt == "txt":
-                                lesson_file = uploads_dir / f"{base_name}.txt"
-                                lesson_file.write_text("\n\n".join(lesson), encoding="utf-8")
-                                payload = None
-                            elif export_fmt == "json":
-                                lesson_file = uploads_dir / f"{base_name}.json"
-                                lesson_file.write_text(json.dumps(lesson, ensure_ascii=False, indent=2), encoding="utf-8")
-                                payload = json.dumps(lesson, ensure_ascii=False).encode("utf-8")
-                            else:  # csv
-                                lesson_file = uploads_dir / f"{base_name}.csv"
-                                with lesson_file.open("w", encoding="utf-8", newline="") as fh:
-                                    writer = csv.writer(fh)
-                                    for row in lesson:
-                                        writer.writerow([row])
-                                payload = lesson_file.read_bytes()
+    st.markdown("#### Materials Search")
+    query = st.text_input("Hledat v materiálech:", key="materials_query")
+    if st.button("Hledat"):
+        if not query:
+            st.warning("Zadej dotaz pro vyhledávání.")
+        else:
+            from app.core.local_sources import retrieve_chunks
 
-                            msg3 = f"✅ Generated lesson ({len(lesson)} items) and saved to {lesson_file.name}"
-                            st.session_state.chat_history.append(("system", msg3))
-                            st.session_state.last_response = msg3
-                            st.success(msg3)
-                            if analysis.topics:
-                                topics_label = ", ".join(analysis.topics[:5])
-                                st.write(f"Top topics: {topics_label}")
-                            st.write(f"Explicit questions: {len(analysis.explicit_questions)}")
-                            st.write(f"Final lesson count: {len(lesson)}")
-                            # display preview truncated to preview_len
-                            st.subheader("Generated lesson preview")
-                            for i, it in enumerate(lesson[:20], 1):
-                                display = it if len(it) <= int(preview_len) else it[: int(preview_len)] + "..."
-                                st.write(f"{i}. {display}")
+            results = retrieve_chunks(context.sources, query, limit=5)
+            st.session_state.material_search_results = results
 
-                            # provide download button for JSON/CSV or TXT
-                            try:
-                                if export_fmt == "txt":
-                                    with lesson_file.open("rb") as fh:
-                                        data = fh.read()
-                                    st.download_button("Download lesson (txt)", data, file_name=lesson_file.name)
-                                elif export_fmt == "json":
-                                    st.download_button("Download lesson (json)", payload, file_name=lesson_file.name)
-                                else:
-                                    st.download_button("Download lesson (csv)", payload, file_name=lesson_file.name)
-                            except Exception:
-                                pass
-                        except Exception as e:
-                            msg3 = f"❌ Error generating lesson: {str(e)}"
-                            st.session_state.chat_history.append(("system", msg3))
-                            st.error(msg3)
+    results = st.session_state.material_search_results
+    if results:
+        options = [chunk.id for chunk in results]
+        label_map = {
+            chunk.id: f"{chunk.source_file} · p.{chunk.page_num} · {chunk.id}"
+            for chunk in results
+        }
+        selected_ids = st.multiselect(
+            "Vybrat chunky jako kontext:",
+            options=options,
+            default=list(st.session_state.selected_chunk_ids & set(options)),
+            format_func=lambda cid: label_map[cid],
+            key="materials_context_select",
+        )
+        if st.button("Použít jako kontext"):
+            st.session_state.selected_chunk_ids = set(selected_ids)
+            context.selected_sources = [
+                chunk for chunk in context.sources if chunk.id in st.session_state.selected_chunk_ids
+            ]
+            st.success(f"Kontext aktualizován: {len(context.selected_sources)} chunků")
+    else:
+        st.info("Vyhledávání zatím nemá výsledky.")
 
-                # Extra management actions
-                st.divider()
-                if st.button("Clear loaded sources"):
-                    context.sources.clear()
-                    st.success("Cleared loaded sources")
+
+def render_tasks(context: CliContext) -> None:
+    st.markdown("### Tasks")
+    st.markdown("<div class='panel-muted'>Agenda s týdenním pohledem.</div>", unsafe_allow_html=True)
+    if st.button("Auto‑plán dne"):
+        response = "✅ Dnešní plán byl připraven (offline simulace)."
+        st.session_state.chat_history.append(("system", response))
+        st.session_state.last_response = response
+
+    days = ["Po", "Út", "St", "Čt", "Pá"]
+    day_cols = st.columns(5)
+    for day, col in zip(days, day_cols):
+        with col:
+            render_card(day, "• Studium 45 min<br/>• Opakování 15 min", "iOS‑style blok.")
+
+    st.markdown("#### Todo list (Assistant Mode)")
+    memory = load_memory(MEMORY_PATH)
+    if memory.todos:
+        for i, todo in enumerate(memory.todos, 1):
+            col1, col2 = st.columns([4, 1])
+            with col1:
+                st.write(f"{i}. {todo}")
+            with col2:
+                if st.button("✓", key=f"todo_task_{i}"):
+                    response = handle_command(context, f"/todo done {i}")
+                    st.session_state.chat_history.append(("system", response))
                     st.rerun()
+    else:
+        st.info("Žádné úkoly nejsou přidané.")
 
-                # Manage saved lessons
-                lesson_files = [f.name for f in uploads_dir.iterdir() if f.is_file() and f.name.startswith("lesson_")]
-                if lesson_files:
-                    st.subheader("Saved lessons")
-                    sel_les = st.selectbox("Select lesson to delete:", lesson_files, key="lesson_del_select")
-                    if st.button("Delete selected lesson"):
-                        try:
-                            (uploads_dir / sel_les).unlink()
-                            st.success(f"Deleted {sel_les}")
-                        except Exception as e:
-                            st.error(f"Error deleting: {e}")
+    st.markdown("#### Přidat úkol")
+    todo_text = st.text_input("Nový úkol:", key="todo_input_tasks")
+    if st.button("Přidat úkol"):
+        if todo_text:
+            response = handle_command(context, f"/todo add {todo_text}")
+            st.session_state.chat_history.append(("system", response))
+            st.rerun()
 
-            st.info(f"📄 {len(context.sources)} chunks loaded" if context.sources else "📄 No files loaded")
-        
-        with tab3:
-            st.subheader("Lesson History")
-            memory = load_memory(MEMORY_PATH)
-            if memory.lesson_history:
-                for i, record in enumerate(reversed(memory.lesson_history[-5:])):  # Last 5
-                    st.write(
-                        f"**{i+1}.** {record.timestamp}\n"
-                        f"Subject: {record.subject or 'N/A'} | "
-                        f"Errors: {record.errors} | "
-                        f"Peak: {record.strictness_peak}"
-                    )
-            else:
-                st.write("No lessons yet")
-    
-    # Main chat area
-    st.subheader("Lesson Interface")
-    
-    # Display current state
+
+def render_profile(context: CliContext) -> None:
+    st.markdown("### Profile")
+    st.markdown("<div class='panel-muted'>Nastavení režimu, přísnosti a hlasu.</div>", unsafe_allow_html=True)
+
+    st.markdown("#### Režim")
+    mode = st.radio(
+        "Zvol režim:",
+        ["teacher", "assistant"],
+        index=0 if context.mode == "teacher" else 1,
+        key="mode_selector_main",
+        horizontal=True,
+    )
+    if mode != context.mode:
+        response = handle_command(context, f"/mode {mode}")
+        st.session_state.chat_history.append(("system", response))
+        st.session_state.last_response = response
+
+    st.markdown("#### Přísnost")
+    strictness = st.slider("Přísnost (1–5)", 1, 5, context.engine.strictness, key="strictness_slider")
+    if strictness != context.engine.strictness:
+        context.engine.strictness = strictness
+        response = f"✅ Přísnost nastavena na {strictness}."
+        st.session_state.chat_history.append(("system", response))
+        st.session_state.last_response = response
+
+    st.markdown("#### Hlas")
+    voice_enabled = st.checkbox("Hlasový výstup", value=context.voice_enabled, key="voice_toggle")
+    if voice_enabled != context.voice_enabled:
+        cmd = "/voice on" if voice_enabled else "/voice off"
+        response = handle_command(context, cmd)
+        st.session_state.chat_history.append(("system", response))
+        st.session_state.last_response = response
+
+
+def render_tutor_mode(context: CliContext) -> None:
+    st.markdown("### Tutor Mode")
+    if st.session_state.selected_chunk_ids:
+        context.selected_sources = [
+            chunk for chunk in context.sources if chunk.id in st.session_state.selected_chunk_ids
+        ]
+    else:
+        context.selected_sources = []
+
+    st.markdown("#### Stav lekce")
     with st.container():
         col1, col2 = st.columns([3, 1])
         with col1:
@@ -332,120 +467,91 @@ def main() -> None:
         with col2:
             if st.button("🔄 Refresh"):
                 st.rerun()
-    
-    # Chat history
-    st.subheader("Conversation")
-    chat_container = st.container(border=True)
-    
+
+    st.markdown("#### Konverzace")
+    chat_container = st.container()
     with chat_container:
         for role, message in st.session_state.chat_history:
-            if role == "user":
-                st.write(f"**You**: {message}")
-            else:
-                st.write(f"**Klara**: {message}")
-    
-    # Command input
-    st.subheader("Input & Response")
-    
-    # Determine placeholder text based on context
+            render_chat_message(role, message)
+            if role != "user":
+                cited = _match_cited_chunks(context, message)
+                st.markdown("<div class='panel-muted'>Source Chips</div>", unsafe_allow_html=True)
+                render_source_chips(context, cited)
+
+    st.markdown("#### Vstup")
     if context.session.last_question:
-        placeholder = "Type your answer here..."
-        help_text = "📝 Answer the question above"
+        placeholder = "Napiš odpověď…"
+        help_text = "📝 Odpověz na otázku."
     else:
-        placeholder = "Type command (e.g., /help, /start) or text"
-        help_text = "💬 Enter a command or text"
-    
+        placeholder = "Napiš příkaz (/start) nebo text."
+        help_text = "💬 Příkaz nebo zpráva."
+
     col1, col2 = st.columns([3, 1])
     with col1:
-        user_input = st.text_input(
-            help_text,
-            placeholder=placeholder,
-            key="command_input"
-        )
+        user_input = st.text_input(help_text, placeholder=placeholder, key="command_input_main")
     with col2:
-        submit = st.button("Send", use_container_width=True)
-    
+        submit = st.button("Odeslat", use_container_width=True)
+
     if submit and user_input:
-        # If there's a pending question, treat input as answer
         if context.session.last_question:
             response = handle_command(context, f"/answer {user_input}")
         else:
-            # Otherwise treat as command
             response = handle_command(context, user_input)
-        
+
         st.session_state.chat_history.append(("user", user_input))
         st.session_state.chat_history.append(("system", response))
         st.session_state.last_response = response
         st.rerun()
-    
-    # Quick action buttons
-    st.subheader("Quick Actions")
-    col1, col2, col3, col4, col5 = st.columns(5)
-    
+
+    st.markdown("#### Quick Actions")
+    col1, col2, col3, col4 = st.columns(4)
     with col1:
-        if st.button("📖 Start"):
+        if st.button("Nápověda"):
+            response = handle_command(context, "/help")
+            st.session_state.chat_history.append(("system", response))
+            st.rerun()
+    with col2:
+        if st.button("Další téma"):
+            response = handle_command(context, "/next")
+            st.session_state.chat_history.append(("system", response))
+            st.rerun()
+    with col3:
+        if st.button("Začít lekci"):
             response = handle_command(context, "/start")
             st.session_state.chat_history.append(("system", response))
             st.rerun()
-    
-    with col2:
-        if st.button("❓ Ask"):
-            response = handle_command(context, "/ask")
-            st.session_state.chat_history.append(("system", response))
-            st.rerun()
-    
-    with col3:
-        if st.button("✅ OK"):
-            response = handle_command(context, "/ok")
-            st.session_state.chat_history.append(("system", response))
-            st.rerun()
-    
     with col4:
-        if st.button("❌ Fail"):
-            response = handle_command(context, "/fail")
-            st.session_state.chat_history.append(("system", response))
-            st.rerun()
-    
-    with col5:
-        if st.button("🏁 End"):
+        if st.button("Ukončit"):
             response = handle_command(context, "/end")
             st.session_state.chat_history.append(("system", response))
             st.rerun()
-    
-    # Assistant mode todos
-    if context.mode == "assistant":
-        st.divider()
-        st.subheader("📝 Todos (Assistant Mode)")
-        
-        col1, col2 = st.columns([3, 1])
-        with col1:
-            todo_text = st.text_input("Add new todo:", key="todo_input")
-        with col2:
-            if st.button("Add", use_container_width=True):
-                if todo_text:
-                    response = handle_command(context, f"/todo add {todo_text}")
-                    st.session_state.chat_history.append(("system", response))
-                    st.rerun()
-        
-        memory = load_memory(MEMORY_PATH)
-        if memory.todos:
-            for i, todo in enumerate(memory.todos, 1):
-                col1, col2 = st.columns([4, 1])
-                with col1:
-                    st.write(f"{i}. {todo}")
-                with col2:
-                    if st.button("✓", key=f"todo_{i}"):
-                        response = handle_command(context, f"/todo done {i}")
-                        st.session_state.chat_history.append(("system", response))
-                        st.rerun()
-        else:
-            st.info("No todos yet")
-    
-    # Display last response
+
+
+def main() -> None:
+    """Main Streamlit app."""
+    init_session_state()
+    context = st.session_state.context
+
+    apply_theme()
+
+    st.markdown("<h1 class='app-title'>Klara AI</h1>", unsafe_allow_html=True)
+    st.markdown("<div class='panel-muted'>iOS Settings look & feel · Old Money elegance · Offline‑first</div>", unsafe_allow_html=True)
+
+    tabs = st.tabs(["Dashboard", "Tutor Mode", "Materials", "Tasks", "Profile"])
+    with tabs[0]:
+        render_dashboard(context)
+    with tabs[1]:
+        render_tutor_mode(context)
+    with tabs[2]:
+        render_materials(context)
+    with tabs[3]:
+        render_tasks(context)
+    with tabs[4]:
+        render_profile(context)
+
     if st.session_state.last_response:
         st.divider()
-        with st.container(border=True):
-            st.info(st.session_state.last_response)
+        st.info(st.session_state.last_response)
 
 
 if __name__ == "__main__":
