@@ -17,34 +17,67 @@ from app.core import retrieval
 class SourceChunk:
     text: str
     source: str
+    page: int | None = None
+    source_path: str | None = None
 
 
-def ingest_file(path: Path, *, chunk_size: int = 400, overlap: int = 40) -> list[SourceChunk]:
+def ingest_file(
+    path: Path,
+    *,
+    chunk_size: int = 700,
+    overlap: int = 100,
+    source_label: str | None = None,
+) -> list[SourceChunk]:
     if not path.exists():
         raise ValueError(f"File not found: {path}")
+    label = source_label or path.name
+    source_path = str(path)
     suffix = path.suffix.lower()
     if suffix in {".txt", ".md"}:
         text = path.read_text(encoding="utf-8", errors="ignore")
-        return _chunk_text(text, source=str(path), chunk_size=chunk_size, overlap=overlap)
+        return _chunk_text(
+            text,
+            source=label,
+            source_path=source_path,
+            chunk_size=chunk_size,
+            overlap=overlap,
+        )
     if suffix == ".pdf":
         _ensure_dependency("pypdf", "pypdf")
         pdf = importlib.import_module("pypdf")
         try:
             reader = pdf.PdfReader(str(path))
             pages = [page.extract_text() or "" for page in reader.pages]
-            text = "\n".join(pages)
         except Exception:
             # Fallback: some uploaded files may be plain text saved with .pdf extension
             # or malformed PDFs; try to read as text to still extract content.
-            text = path.read_text(encoding="utf-8", errors="ignore")
-        return _chunk_text(text, source=str(path), chunk_size=chunk_size, overlap=overlap)
+            pages = [path.read_text(encoding="utf-8", errors="ignore")]
+        chunks: list[SourceChunk] = []
+        for page_number, page_text in enumerate(pages, start=1):
+            chunks.extend(
+                _chunk_text(
+                    page_text,
+                    source=label,
+                    source_path=source_path,
+                    page=page_number,
+                    chunk_size=chunk_size,
+                    overlap=overlap,
+                )
+            )
+        return chunks
     if suffix == ".docx":
         _ensure_dependency("docx", "python-docx")
         docx = importlib.import_module("docx")
         document = docx.Document(str(path))
         paragraphs = [paragraph.text for paragraph in document.paragraphs]
         text = "\n".join(paragraphs)
-        return _chunk_text(text, source=str(path), chunk_size=chunk_size, overlap=overlap)
+        return _chunk_text(
+            text,
+            source=label,
+            source_path=source_path,
+            chunk_size=chunk_size,
+            overlap=overlap,
+        )
     raise ValueError("Unsupported file type. Use txt, md, pdf, or docx.")
 
 
@@ -56,9 +89,9 @@ def retrieve_chunks(chunks: list[SourceChunk], query: str, *, limit: int = 3) ->
         cached = _load_cached_index(cache_context, chunks)
         if cached:
             return retrieval.search(cached, query, k=limit)
-    results = _simple_retrieve(chunks, query, limit=limit)
+    index = retrieval.build_index(chunks)
+    results = retrieval.search(index, query, k=limit)
     if cache_context:
-        index = retrieval.build_index(chunks)
         _save_cached_index(cache_context, index)
     return results
 
@@ -71,16 +104,31 @@ def _ensure_dependency(module_name: str, package_name: str) -> None:
         )
 
 
-def _chunk_text(text: str, *, source: str, chunk_size: int, overlap: int) -> list[SourceChunk]:
-    words = text.split()
-    if not words:
+def _chunk_text(
+    text: str,
+    *,
+    source: str,
+    source_path: str | None,
+    chunk_size: int,
+    overlap: int,
+    page: int | None = None,
+) -> list[SourceChunk]:
+    normalized = re.sub(r"\s+", " ", text).strip()
+    if not normalized:
         return []
     chunks: list[SourceChunk] = []
     step = max(1, chunk_size - overlap)
-    for start in range(0, len(words), step):
-        segment = " ".join(words[start : start + chunk_size]).strip()
+    for start in range(0, len(normalized), step):
+        segment = normalized[start : start + chunk_size].strip()
         if segment:
-            chunks.append(SourceChunk(text=segment, source=source))
+            chunks.append(
+                SourceChunk(
+                    text=segment,
+                    source=source,
+                    page=page,
+                    source_path=source_path,
+                )
+            )
     return chunks
 
 
@@ -105,22 +153,17 @@ def _simple_retrieve(chunks: list[SourceChunk], query: str, *, limit: int) -> li
 def _get_cache_context(chunks: list[SourceChunk]) -> _CacheContext | None:
     if not chunks:
         return None
-    source = chunks[0].source
-    if any(chunk.source != source for chunk in chunks):
-        return None
-    source_path = Path(source)
-    if not source_path.exists():
-        return None
-    file_hash = _hash_file(source_path)
     chunk_hashes = [_hash_text(chunk.text) for chunk in chunks]
     cache_dir = _index_dir()
     cache_dir.mkdir(parents=True, exist_ok=True)
-    chunk_list_hash = _hash_text("".join(chunk_hashes))
-    cache_path = cache_dir / f"{file_hash}_{chunk_list_hash}.json"
+    source_labels = [chunk.source for chunk in chunks]
+    source_paths = [chunk.source_path or "" for chunk in chunks]
+    chunk_list_hash = _hash_text("".join(chunk_hashes) + "|" + "|".join(source_labels + source_paths))
+    cache_path = cache_dir / f"{chunk_list_hash}.json"
     return _CacheContext(
-        source_path=source_path,
-        file_hash=file_hash,
         chunk_hashes=chunk_hashes,
+        source_labels=source_labels,
+        source_paths=source_paths,
         cache_path=cache_path,
     )
 
@@ -130,9 +173,11 @@ def _load_cached_index(context: _CacheContext, chunks: list[SourceChunk]) -> ret
         payload = json.loads(context.cache_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
         return None
-    if payload.get("file_hash") != context.file_hash:
-        return None
     if payload.get("chunk_hashes") != context.chunk_hashes:
+        return None
+    if payload.get("source_labels") != context.source_labels:
+        return None
+    if payload.get("source_paths") != context.source_paths:
         return None
     data = payload.get("index")
     if not isinstance(data, dict):
@@ -142,8 +187,9 @@ def _load_cached_index(context: _CacheContext, chunks: list[SourceChunk]) -> ret
 
 def _save_cached_index(context: _CacheContext, index: retrieval.Index) -> None:
     payload = {
-        "file_hash": context.file_hash,
         "chunk_hashes": context.chunk_hashes,
+        "source_labels": context.source_labels,
+        "source_paths": context.source_paths,
         "index": retrieval.index_to_cache(index),
     }
     context.cache_path.write_text(json.dumps(payload), encoding="utf-8")
@@ -153,21 +199,13 @@ def _index_dir() -> Path:
     return Path(__file__).resolve().parents[2] / "uploads" / ".index"
 
 
-def _hash_file(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as fh:
-        for chunk in iter(lambda: fh.read(65536), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
-
-
 def _hash_text(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8", errors="ignore")).hexdigest()
 
 
 @dataclass(frozen=True)
 class _CacheContext:
-    source_path: Path
-    file_hash: str
     chunk_hashes: list[str]
+    source_labels: list[str]
+    source_paths: list[str]
     cache_path: Path

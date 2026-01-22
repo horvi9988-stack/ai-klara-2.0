@@ -1,4 +1,4 @@
-from app.core.local_sources import SourceChunk
+from app.core.local_sources import SourceChunk, retrieve_chunks
 from app.core.retrieval import build_index, search
 
 
@@ -12,3 +12,14 @@ def test_retrieval_returns_relevant_chunk():
     results = search(index, "banana recipe", k=1)
     assert results
     assert "smoothie" in results[0].text
+
+
+def test_retrieve_chunks_ranks_query_matches():
+    chunks = [
+        SourceChunk(text="alpha beta gamma", source="notes.txt"),
+        SourceChunk(text="delta epsilon zeta", source="notes.txt"),
+        SourceChunk(text="beta wins over delta", source="notes.txt"),
+    ]
+    results = retrieve_chunks(chunks, "beta", limit=1)
+    assert results
+    assert "beta" in results[0].text
