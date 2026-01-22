@@ -2,10 +2,8 @@
 
 from __future__ import annotations
 
-import tempfile
 import json
 import csv
-import io
 from pathlib import Path
 
 import streamlit as st
@@ -15,7 +13,9 @@ from app.core.session import LessonSession
 from app.core.state_machine import TeacherEngine
 from app.llm.ollama_client import DEFAULT_MODEL
 from app.storage.memory import load_memory, save_memory
-from app.core.local_sources import ingest_file
+from app.core.local_sources import SourceChunk, ingest_file, retrieve_chunks
+from app.core.llm_question_engine import generate_llm_question
+from app.core.question_engine import generate_lesson_from_sources, generate_question
 
 
 # Page config
@@ -64,6 +64,12 @@ def init_session_state() -> None:
         st.session_state.context = context
         st.session_state.chat_history = []
         st.session_state.last_response = None
+    if "active_context_chunks" not in st.session_state:
+        st.session_state.active_context_chunks = []
+    if "search_results" not in st.session_state:
+        st.session_state.search_results = []
+    if "search_query" not in st.session_state:
+        st.session_state.search_query = ""
 
 
 def format_state_display(context: CliContext) -> str:
@@ -83,12 +89,148 @@ def format_state_display(context: CliContext) -> str:
     )
 
 
+def _build_retrieval_query(context: CliContext, user_query: str | None) -> str:
+    parts = [context.subject, context.topic, user_query]
+    return " ".join(part.strip() for part in parts if part and part.strip())
+
+
+def _clip_text(text: str, limit: int) -> str:
+    cleaned = text.replace("\n", " ").strip()
+    if limit <= 0:
+        return ""
+    if len(cleaned) <= limit:
+        return cleaned
+    return cleaned[:limit].rstrip() + "..."
+
+
+def _source_label(chunk: SourceChunk) -> str:
+    page = chunk.page if chunk.page is not None else 1
+    return f"[Zdroj: {chunk.source}, str. {page}]"
+
+
+def _with_citation_prefix(chunk: SourceChunk) -> SourceChunk:
+    citation = _source_label(chunk)
+    return SourceChunk(
+        text=f"{citation} {chunk.text}",
+        source=chunk.source,
+        page=chunk.page,
+        source_path=chunk.source_path,
+    )
+
+
+def _retrieve_context_chunks(
+    context: CliContext,
+    user_query: str | None,
+    *,
+    limit: int = 5,
+) -> list[SourceChunk]:
+    if not context.sources:
+        return []
+    query = _build_retrieval_query(context, user_query)
+    if not query:
+        return context.sources[:limit]
+    return retrieve_chunks(context.sources, query, limit=limit)
+
+
+def _generate_question_from_context(
+    context: CliContext,
+    context_chunks: list[SourceChunk],
+    *,
+    preview_len: int = 250,
+) -> str:
+    if context.llm_enabled:
+        llm_question = generate_llm_question(
+            context.subject,
+            context.level,
+            context.topic,
+            context.engine.strictness,
+            sources=context_chunks,
+            model=context.llm_model,
+        )
+        if llm_question:
+            context.session.last_question = llm_question.text
+            context.session.last_question_meta = llm_question.meta
+            context.session.questions_asked_count += 1
+            return llm_question.text
+    question = generate_question(
+        context.subject,
+        context.level,
+        context.topic,
+        context.engine.strictness,
+        sources=context_chunks,
+        preview_len=preview_len,
+    )
+    context.session.last_question = question.text
+    context.session.last_question_meta = question.meta
+    context.session.questions_asked_count += 1
+    return question.text
+
+
 def main() -> None:
     """Main Streamlit app."""
     init_session_state()
     context = st.session_state.context
     
     st.title("📚 Klara AI - Tutoring System")
+    st.markdown(
+        """
+        <style>
+        :root {
+            color-scheme: light;
+        }
+        .ios-section-title {
+            color: #6b7280;
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            font-weight: 600;
+            margin: 0.25rem 0 0.5rem;
+        }
+        .ios-card {
+            background: #ffffff;
+            border-radius: 18px;
+            padding: 1rem;
+            box-shadow: 0 2px 12px rgba(15, 23, 42, 0.08);
+            border: 1px solid #f0f2f5;
+        }
+        .ios-card + .ios-card {
+            margin-top: 1rem;
+        }
+        .ios-card .stRadio [role="radiogroup"] {
+            display: flex;
+            gap: 0.5rem;
+        }
+        .ios-card .stRadio label {
+            background: rgba(120, 120, 128, 0.12);
+            padding: 0.25rem 0.75rem;
+            border-radius: 999px;
+            font-weight: 600;
+        }
+        .ios-card .stSlider > div {
+            padding-top: 0.25rem;
+        }
+        .ios-card .stCheckbox {
+            margin-top: 0.25rem;
+        }
+        .ios-pill {
+            display: inline-block;
+            padding: 0.2rem 0.55rem;
+            border-radius: 999px;
+            background: #f3f4f6;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+        .ios-search-result {
+            border-radius: 14px;
+            padding: 0.75rem;
+            border: 1px solid #eef0f3;
+            background: #fafafa;
+            margin-bottom: 0.5rem;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
     
     # Sidebar
     with st.sidebar:
@@ -97,47 +239,90 @@ def main() -> None:
         tab1, tab2, tab3 = st.tabs(["Settings", "Upload", "History"])
         
         with tab1:
-            st.subheader("Mode")
-            mode = st.radio(
-                "Select mode:",
-                ["teacher", "assistant"],
+            st.markdown("<div class='ios-section-title'>Chování AI</div>", unsafe_allow_html=True)
+            st.markdown("<div class='ios-card'>", unsafe_allow_html=True)
+            mode_labels = {"Tutor": "teacher", "Asistent": "assistant"}
+            mode_choice = st.radio(
+                "Mode",
+                list(mode_labels.keys()),
                 index=0 if context.mode == "teacher" else 1,
-                key="mode_selector"
+                horizontal=True,
+                label_visibility="collapsed",
+                key="mode_selector",
             )
-            if mode != context.mode:
-                response = handle_command(context, f"/mode {mode}")
+            chosen_mode = mode_labels[mode_choice]
+            if chosen_mode != context.mode:
+                response = handle_command(context, f"/mode {chosen_mode}")
                 st.session_state.chat_history.append(("system", response))
                 st.session_state.last_response = response
-            
-            st.subheader("Subject & Level")
-            col1, col2 = st.columns(2)
-            with col1:
-                subject = st.text_input("Subject:", value=context.subject or "", key="subject_input")
-                if subject and subject != (context.subject or ""):
-                    response = handle_command(context, f"/subject {subject}")
-                    st.session_state.chat_history.append(("system", response))
-                    st.session_state.last_response = response
-            
-            with col2:
-                level = st.text_input("Level:", value=context.level or "", key="level_input")
-                if level and level != (context.level or ""):
-                    response = handle_command(context, f"/level {level}")
-                    st.session_state.chat_history.append(("system", response))
-                    st.session_state.last_response = response
-            
-            st.subheader("Topic")
-            topic = st.text_area("Topic/Theme:", value=context.topic or "", key="topic_input", height=80)
-            if topic and topic != (context.topic or ""):
-                response = handle_command(context, f"/topic {topic}")
-                st.session_state.chat_history.append(("system", response))
-                st.session_state.last_response = response
-            
-            st.subheader("LLM Settings")
+            st.caption(
+                "Režim Tutor vysvětluje krok za krokem. Asistent odpovídá přímočařeji."
+            )
+
+            strictness = st.slider(
+                "Úroveň přísnosti",
+                min_value=1,
+                max_value=5,
+                value=int(context.engine.strictness),
+                step=1,
+                key="strictness_slider",
+            )
+            if strictness != context.engine.strictness:
+                context.engine.strictness = strictness
+            st.markdown("</div>", unsafe_allow_html=True)
+
+            st.markdown("<div class='ios-section-title'>Technické nastavení</div>", unsafe_allow_html=True)
+            st.markdown("<div class='ios-card'>", unsafe_allow_html=True)
             llm_enabled = st.checkbox("Enable LLM", value=context.llm_enabled, key="llm_checkbox")
             if llm_enabled != context.llm_enabled:
                 cmd = "/llm on" if llm_enabled else "/llm off"
                 response = handle_command(context, cmd)
                 st.session_state.chat_history.append(("system", response))
+                st.session_state.last_response = response
+            model_name = st.text_input(
+                "Model AI",
+                value=context.llm_model,
+                key="model_input",
+            )
+            if model_name and model_name != context.llm_model:
+                response = handle_command(context, f"/model {model_name}")
+                st.session_state.chat_history.append(("system", response))
+                st.session_state.last_response = response
+            voice_enabled = st.checkbox(
+                "Hlasová odpověď",
+                value=context.voice_enabled,
+                key="voice_toggle",
+            )
+            if voice_enabled != context.voice_enabled:
+                cmd = "/voice on" if voice_enabled else "/voice off"
+                response = handle_command(context, cmd)
+                st.session_state.chat_history.append(("system", response))
+                st.session_state.last_response = response
+            st.markdown("</div>", unsafe_allow_html=True)
+
+            st.markdown("<div class='ios-section-title'>Studijní nastavení</div>", unsafe_allow_html=True)
+            st.markdown("<div class='ios-card'>", unsafe_allow_html=True)
+            col1, col2 = st.columns(2)
+            with col1:
+                subject = st.text_input("Subject", value=context.subject or "", key="subject_input")
+                if subject and subject != (context.subject or ""):
+                    response = handle_command(context, f"/subject {subject}")
+                    st.session_state.chat_history.append(("system", response))
+                    st.session_state.last_response = response
+
+            with col2:
+                level = st.text_input("Level", value=context.level or "", key="level_input")
+                if level and level != (context.level or ""):
+                    response = handle_command(context, f"/level {level}")
+                    st.session_state.chat_history.append(("system", response))
+                    st.session_state.last_response = response
+
+            topic = st.text_area("Topic/Theme", value=context.topic or "", key="topic_input", height=80)
+            if topic and topic != (context.topic or ""):
+                response = handle_command(context, f"/topic {topic}")
+                st.session_state.chat_history.append(("system", response))
+                st.session_state.last_response = response
+            st.markdown("</div>", unsafe_allow_html=True)
         
         with tab2:
             st.subheader("Upload Files")
@@ -148,13 +333,13 @@ def main() -> None:
             )
             
             if uploaded_file is not None:
-                # Save to temp file and ingest
-                with tempfile.NamedTemporaryFile(delete=False, suffix=Path(uploaded_file.name).suffix) as tmp:
-                    tmp.write(uploaded_file.getbuffer())
-                    tmp_path = tmp.name
-                
+                uploads_dir = Path(__file__).resolve().parent / "uploads"
+                uploads_dir.mkdir(parents=True, exist_ok=True)
+                saved_path = uploads_dir / uploaded_file.name
+                saved_path.write_bytes(uploaded_file.getbuffer())
+
                 try:
-                    chunks = ingest_file(Path(tmp_path))
+                    chunks = ingest_file(saved_path, source_label=uploaded_file.name)
                     if chunks:
                         context.sources.extend(chunks)
                         msg = f"✅ Uploaded {uploaded_file.name}: {len(chunks)} chunks ingested"
@@ -169,8 +354,6 @@ def main() -> None:
                     msg = f"❌ Error: {str(e)}"
                     st.session_state.chat_history.append(("system", msg))
                     st.error(msg)
-                finally:
-                    Path(tmp_path).unlink()
             
             # Allow ingesting files already present in the workspace `uploads/` folder
             uploads_dir = Path(__file__).resolve().parent / "uploads"
@@ -206,7 +389,7 @@ def main() -> None:
                     if st.button("Ingest selected file"):
                         sel_path = uploads_dir / selected
                         try:
-                            chunks2 = ingest_file(sel_path)
+                            chunks2 = ingest_file(sel_path, source_label=sel_path.name)
                             if chunks2:
                                 context.sources.extend(chunks2)
                                 msg2 = f"✅ Ingested {selected}: {len(chunks2)} chunks"
@@ -223,17 +406,19 @@ def main() -> None:
                             st.error(msg2)
                 with col_b:
                     if st.button("Generate lesson from selected"):
-                        from app.core.question_engine import generate_lesson_from_sources
                         sel_path = uploads_dir / selected
                         try:
-                            chunks2 = ingest_file(sel_path)
+                            chunks2 = ingest_file(sel_path, source_label=sel_path.name)
+                            query = _build_retrieval_query(context, st.session_state.search_query)
+                            retrieved = retrieve_chunks(chunks2, query, limit=12) if query else chunks2[:12]
+                            cited = [_with_citation_prefix(chunk) for chunk in retrieved]
                             lesson, analysis = generate_lesson_from_sources(
-                                chunks2,
+                                cited,
                                 subject=context.subject or "ekonomie",
                                 level=context.level or "zakladni",
                                 strictness=context.engine.strictness,
                                 n_total=int(total_questions),
-                                preview_len=int(preview_len),
+                                preview_len=min(250, int(preview_len)),
                                 return_meta=True,
                             )
                             # save lesson in chosen format
@@ -290,6 +475,8 @@ def main() -> None:
                 st.divider()
                 if st.button("Clear loaded sources"):
                     context.sources.clear()
+                    st.session_state.active_context_chunks = []
+                    st.session_state.search_results = []
                     st.success("Cleared loaded sources")
                     st.rerun()
 
@@ -332,6 +519,43 @@ def main() -> None:
         with col2:
             if st.button("🔄 Refresh"):
                 st.rerun()
+
+    st.markdown("<div class='ios-section-title'>Vyhledávání v materiálech</div>", unsafe_allow_html=True)
+    st.markdown("<div class='ios-card'>", unsafe_allow_html=True)
+    search_col, button_col = st.columns([3, 1])
+    with search_col:
+        search_query = st.text_input(
+            "Hledej v PDF / skriptech",
+            value=st.session_state.search_query,
+            key="search_query_input",
+        )
+    with button_col:
+        search_clicked = st.button("Search", use_container_width=True)
+    if search_clicked:
+        st.session_state.search_query = search_query
+        results = []
+        if search_query.strip():
+            results = retrieve_chunks(context.sources, search_query, limit=5)
+        st.session_state.search_results = results
+
+    if st.session_state.search_results:
+        st.markdown("**Top výsledky**")
+        for item in st.session_state.search_results:
+            page = item.page if item.page is not None else 1
+            snippet = _clip_text(item.text, 250)
+            st.markdown(
+                f"<div class='ios-search-result'>"
+                f"<div><strong>{item.source}</strong> · str. {page}</div>"
+                f"<div>{snippet}</div>"
+                f"</div>",
+                unsafe_allow_html=True,
+            )
+        if st.button("Použít jako kontext"):
+            st.session_state.active_context_chunks = list(st.session_state.search_results)
+            st.success("Vybrané chunky jsou aktivní kontext.")
+    else:
+        st.caption("Zatím žádné výsledky. Nahraj dokument a spusť hledání.")
+    st.markdown("</div>", unsafe_allow_html=True)
     
     # Chat history
     st.subheader("Conversation")
@@ -390,8 +614,18 @@ def main() -> None:
     
     with col2:
         if st.button("❓ Ask"):
-            response = handle_command(context, "/ask")
-            st.session_state.chat_history.append(("system", response))
+            if context.sources:
+                if st.session_state.active_context_chunks:
+                    retrieved = list(st.session_state.active_context_chunks)
+                else:
+                    retrieved = _retrieve_context_chunks(context, st.session_state.search_query, limit=5)
+                    st.session_state.active_context_chunks = list(retrieved)
+                cited = [_with_citation_prefix(chunk) for chunk in retrieved]
+                response = _generate_question_from_context(context, cited)
+                st.session_state.chat_history.append(("system", response))
+            else:
+                response = handle_command(context, "/ask")
+                st.session_state.chat_history.append(("system", response))
             st.rerun()
     
     with col3:
