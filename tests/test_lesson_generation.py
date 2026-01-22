@@ -10,7 +10,10 @@ def test_generate_lesson_basic():
         "2) Jak se meri HDP?\n\n"
         "Toto je dalsi text o ekonomii a makroekonomickych pojmech, popis trhu a poptavky."
     )
-    chunks = [SourceChunk(text=text, source="test"), SourceChunk(text="dalsi text o trhu a poptavce", source="test")]
+    chunks = [
+        SourceChunk(id="test-p1-1", source_file="test", page_num=1, text=text),
+        SourceChunk(id="test-p1-2", source_file="test", page_num=1, text="dalsi text o trhu a poptavce"),
+    ]
 
     lesson = generate_lesson_from_sources(
         chunks,

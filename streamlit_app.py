@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import html
-import tempfile
 from collections import defaultdict
 from pathlib import Path
 
@@ -64,6 +63,8 @@ def init_session_state() -> None:
         st.session_state.chat_history = []
         st.session_state.last_response = None
         st.session_state.active_citation_id = None
+        st.session_state.selected_chunk_ids = set()
+        st.session_state.material_search_results = []
 
 
 def apply_theme() -> None:
@@ -165,39 +166,59 @@ def render_card(title: str, body: str, footer: str | None = None) -> None:
 def chunk_catalog(context: CliContext) -> list[dict[str, str]]:
     catalog = []
     for index, chunk in enumerate(context.sources, 1):
-        source_name = Path(chunk.source).name
-        label = f"{source_name} · chunk {index}"
+        source_name = chunk.source_file
+        label = f"{source_name} · p.{chunk.page_num} · chunk {index}"
         catalog.append(
             {
-                "id": f"{source_name}-{index}",
+                "id": chunk.id,
                 "label": label,
                 "text": chunk.text,
                 "source": source_name,
+                "page": chunk.page_num,
             }
         )
     return catalog
 
 
-def render_source_chips(context: CliContext, limit: int = 3) -> None:
-    catalog = chunk_catalog(context)
-    if not catalog:
+def render_source_chips(context: CliContext, chunks: list[dict[str, str]]) -> None:
+    if not chunks:
         st.markdown("<span class='panel-muted'>Bez citací (zatím žádné zdroje).</span>", unsafe_allow_html=True)
         return
-    chips = catalog[:limit]
-    columns = st.columns(len(chips))
-    for column, chip in zip(columns, chips):
+    columns = st.columns(len(chunks))
+    for column, chip in zip(columns, chunks):
         with column:
-            if st.button(f"📄 {chip['label']}", key=f"chip_{chip['id']}"):
+            if st.button(f"📄 {chip['source']} · p.{chip['page']}", key=f"chip_{chip['id']}"):
                 st.session_state.active_citation_id = chip["id"]
+    catalog = chunk_catalog(context)
     active = next((chip for chip in catalog if chip["id"] == st.session_state.active_citation_id), None)
     if active:
         with st.expander(f"Citace: {active['label']}", expanded=True):
             st.write(active["text"])
             if st.button("Použít jako kontext", key=f"use_context_{active['id']}"):
+                st.session_state.selected_chunk_ids = {active["id"]}
+                context.selected_sources = [
+                    chunk for chunk in context.sources if chunk.id in st.session_state.selected_chunk_ids
+                ]
                 response = f"✅ Kontext přidán: {active['label']}"
                 st.session_state.chat_history.append(("system", response))
                 st.session_state.last_response = response
                 st.rerun()
+
+
+def _match_cited_chunks(context: CliContext, message: str) -> list[dict[str, str]]:
+    import re
+
+    citations = re.findall(r"\\[Source: ([^\\]]+?) p\\.(\\d+)\\]", message)
+    if not citations:
+        return []
+    matched: list[dict[str, str]] = []
+    catalog = chunk_catalog(context)
+    for source, page in citations:
+        for chunk in catalog:
+            if chunk["source"] == source and str(chunk["page"]) == page:
+                matched.append(chunk)
+                break
+    return matched
 
 
 def render_chat_message(role: str, message: str) -> None:
@@ -261,11 +282,11 @@ def render_materials(context: CliContext) -> None:
             key="file_uploader_main",
         )
         if uploaded_file is not None:
-            with tempfile.NamedTemporaryFile(delete=False, suffix=Path(uploaded_file.name).suffix) as tmp:
-                tmp.write(uploaded_file.getbuffer())
-                tmp_path = tmp.name
+            target_path = uploads_dir / uploaded_file.name
+            with target_path.open("wb") as handle:
+                handle.write(uploaded_file.getbuffer())
             try:
-                chunks = ingest_file(Path(tmp_path))
+                chunks = ingest_file(target_path)
                 if chunks:
                     context.sources.extend(chunks)
                     msg = f"✅ Nahráno {uploaded_file.name}: {len(chunks)} chunků"
@@ -280,8 +301,6 @@ def render_materials(context: CliContext) -> None:
                 msg = f"❌ Chyba ingestace: {exc}"
                 st.session_state.chat_history.append(("system", msg))
                 st.error(msg)
-            finally:
-                Path(tmp_path).unlink()
     with col2:
         if st.button("Vyčistit nahrané zdroje"):
             context.sources.clear()
@@ -290,6 +309,21 @@ def render_materials(context: CliContext) -> None:
     st.markdown("#### Lokální soubory")
     files = [f for f in uploads_dir.iterdir() if f.is_file() and not f.name.startswith("lesson_")]
     if files:
+        selected_file = st.selectbox("Vybrat soubor k ingestaci:", [f.name for f in files], key="uploads_select")
+        if st.button("Ingestovat vybraný soubor"):
+            sel_path = uploads_dir / selected_file
+            try:
+                chunks = ingest_file(sel_path)
+                if chunks:
+                    context.sources.extend(chunks)
+                    msg = f"✅ Ingestováno {selected_file}: {len(chunks)} chunků"
+                    st.session_state.chat_history.append(("system", msg))
+                    st.session_state.last_response = msg
+                    st.success(msg)
+                else:
+                    st.error("❌ Soubor neobsahuje čitelný text.")
+            except Exception as exc:
+                st.error(f"❌ Chyba ingestace: {exc}")
         for file in files:
             render_card(
                 file.name,
@@ -303,11 +337,45 @@ def render_materials(context: CliContext) -> None:
     if context.sources:
         grouped: dict[str, int] = defaultdict(int)
         for chunk in context.sources:
-            grouped[Path(chunk.source).name] += 1
+            grouped[chunk.source_file] += 1
         for source, count in grouped.items():
             render_card(source, f"{count} chunků", "Metadata: source + index.")
     else:
         st.info("Žádné chunky nejsou načtené.")
+
+    st.markdown("#### Materials Search")
+    query = st.text_input("Hledat v materiálech:", key="materials_query")
+    if st.button("Hledat"):
+        if not query:
+            st.warning("Zadej dotaz pro vyhledávání.")
+        else:
+            from app.core.local_sources import retrieve_chunks
+
+            results = retrieve_chunks(context.sources, query, limit=5)
+            st.session_state.material_search_results = results
+
+    results = st.session_state.material_search_results
+    if results:
+        options = [chunk.id for chunk in results]
+        label_map = {
+            chunk.id: f"{chunk.source_file} · p.{chunk.page_num} · {chunk.id}"
+            for chunk in results
+        }
+        selected_ids = st.multiselect(
+            "Vybrat chunky jako kontext:",
+            options=options,
+            default=list(st.session_state.selected_chunk_ids & set(options)),
+            format_func=lambda cid: label_map[cid],
+            key="materials_context_select",
+        )
+        if st.button("Použít jako kontext"):
+            st.session_state.selected_chunk_ids = set(selected_ids)
+            context.selected_sources = [
+                chunk for chunk in context.sources if chunk.id in st.session_state.selected_chunk_ids
+            ]
+            st.success(f"Kontext aktualizován: {len(context.selected_sources)} chunků")
+    else:
+        st.info("Vyhledávání zatím nemá výsledky.")
 
 
 def render_tasks(context: CliContext) -> None:
@@ -384,6 +452,12 @@ def render_profile(context: CliContext) -> None:
 
 def render_tutor_mode(context: CliContext) -> None:
     st.markdown("### Tutor Mode")
+    if st.session_state.selected_chunk_ids:
+        context.selected_sources = [
+            chunk for chunk in context.sources if chunk.id in st.session_state.selected_chunk_ids
+        ]
+    else:
+        context.selected_sources = []
 
     st.markdown("#### Stav lekce")
     with st.container():
@@ -400,8 +474,9 @@ def render_tutor_mode(context: CliContext) -> None:
         for role, message in st.session_state.chat_history:
             render_chat_message(role, message)
             if role != "user":
+                cited = _match_cited_chunks(context, message)
                 st.markdown("<div class='panel-muted'>Source Chips</div>", unsafe_allow_html=True)
-                render_source_chips(context)
+                render_source_chips(context, cited)
 
     st.markdown("#### Vstup")
     if context.session.last_question:
