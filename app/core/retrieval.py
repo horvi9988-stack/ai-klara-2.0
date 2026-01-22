@@ -97,6 +97,13 @@ def search(index: Index, query: str, *, k: int = 3) -> list["SourceChunk"]:
     return [index.chunks[doc_id] for score, doc_id in scores[:k] if score > 0]
 
 
+def search_chunks(query: str, chunks: list["SourceChunk"], top_k: int = 3) -> list["SourceChunk"]:
+    if not chunks:
+        return []
+    index = build_index(chunks)
+    return search(index, query, k=top_k)
+
+
 def index_to_cache(index: Index) -> dict[str, object]:
     return {
         "version": 1,
