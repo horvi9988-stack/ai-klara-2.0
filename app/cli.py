@@ -50,6 +50,7 @@ class CliContext:
     llm_model: str = DEFAULT_MODEL
     voice_enabled: bool = False
     sources: list[SourceChunk] = field(default_factory=list)
+    selected_sources: list[SourceChunk] = field(default_factory=list)
     custom_subjects: set[str] = field(default_factory=set)
     custom_subject_aliases: dict[str, str] = field(default_factory=dict)
     mode: str = "teacher"
@@ -424,13 +425,14 @@ def _ask_next_question(context: CliContext) -> str:
 def _generate_question(context: CliContext) -> Question:
     memory = load_memory(context.memory_path)
     prefer_easy = _should_prefer_easy(memory, context.subject, context.topic)
+    active_sources = context.selected_sources or context.sources
     if context.llm_enabled:
         llm_question = generate_llm_question(
             context.subject,
             context.level,
             context.topic,
             context.engine.strictness,
-            sources=context.sources,
+            sources=active_sources,
             model=context.llm_model,
         )
         if llm_question:
@@ -441,7 +443,7 @@ def _generate_question(context: CliContext) -> Question:
         context.topic,
         context.engine.strictness,
         prefer_easy=prefer_easy,
-        sources=context.sources,
+        sources=active_sources,
     )
 
 
