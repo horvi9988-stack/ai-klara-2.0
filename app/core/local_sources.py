@@ -15,36 +15,49 @@ from app.core import retrieval
 
 @dataclass
 class SourceChunk:
+    id: str
+    source_file: str
+    page_num: int
     text: str
-    source: str
 
 
-def ingest_file(path: Path, *, chunk_size: int = 400, overlap: int = 40) -> list[SourceChunk]:
+def ingest_file(path: Path, *, chunk_size: int = 600, overlap: int = 100) -> list[SourceChunk]:
     if not path.exists():
         raise ValueError(f"File not found: {path}")
     suffix = path.suffix.lower()
     if suffix in {".txt", ".md"}:
         text = path.read_text(encoding="utf-8", errors="ignore")
-        return _chunk_text(text, source=str(path), chunk_size=chunk_size, overlap=overlap)
+        return _chunk_text(text, source=str(path), page_num=1, chunk_size=chunk_size, overlap=overlap)
     if suffix == ".pdf":
         _ensure_dependency("pypdf", "pypdf")
         pdf = importlib.import_module("pypdf")
         try:
             reader = pdf.PdfReader(str(path))
-            pages = [page.extract_text() or "" for page in reader.pages]
-            text = "\n".join(pages)
+            chunks: list[SourceChunk] = []
+            for page_index, page in enumerate(reader.pages, start=1):
+                page_text = page.extract_text() or ""
+                chunks.extend(
+                    _chunk_text(
+                        page_text,
+                        source=str(path),
+                        page_num=page_index,
+                        chunk_size=chunk_size,
+                        overlap=overlap,
+                    )
+                )
+            return chunks
         except Exception:
             # Fallback: some uploaded files may be plain text saved with .pdf extension
             # or malformed PDFs; try to read as text to still extract content.
             text = path.read_text(encoding="utf-8", errors="ignore")
-        return _chunk_text(text, source=str(path), chunk_size=chunk_size, overlap=overlap)
+            return _chunk_text(text, source=str(path), page_num=1, chunk_size=chunk_size, overlap=overlap)
     if suffix == ".docx":
         _ensure_dependency("docx", "python-docx")
         docx = importlib.import_module("docx")
         document = docx.Document(str(path))
         paragraphs = [paragraph.text for paragraph in document.paragraphs]
         text = "\n".join(paragraphs)
-        return _chunk_text(text, source=str(path), chunk_size=chunk_size, overlap=overlap)
+        return _chunk_text(text, source=str(path), page_num=1, chunk_size=chunk_size, overlap=overlap)
     raise ValueError("Unsupported file type. Use txt, md, pdf, or docx.")
 
 
@@ -71,16 +84,32 @@ def _ensure_dependency(module_name: str, package_name: str) -> None:
         )
 
 
-def _chunk_text(text: str, *, source: str, chunk_size: int, overlap: int) -> list[SourceChunk]:
-    words = text.split()
-    if not words:
+def _chunk_text(
+    text: str,
+    *,
+    source: str,
+    page_num: int,
+    chunk_size: int,
+    overlap: int,
+) -> list[SourceChunk]:
+    cleaned = text.replace("\n", " ").strip()
+    if not cleaned:
         return []
     chunks: list[SourceChunk] = []
     step = max(1, chunk_size - overlap)
-    for start in range(0, len(words), step):
-        segment = " ".join(words[start : start + chunk_size]).strip()
+    source_name = Path(source).name
+    for start in range(0, len(cleaned), step):
+        segment = cleaned[start : start + chunk_size].strip()
         if segment:
-            chunks.append(SourceChunk(text=segment, source=source))
+            chunk_id = f"{source_name}-p{page_num}-{len(chunks) + 1}"
+            chunks.append(
+                SourceChunk(
+                    id=chunk_id,
+                    source_file=source_name,
+                    page_num=page_num,
+                    text=segment,
+                )
+            )
     return chunks
 
 
@@ -105,14 +134,14 @@ def _simple_retrieve(chunks: list[SourceChunk], query: str, *, limit: int) -> li
 def _get_cache_context(chunks: list[SourceChunk]) -> _CacheContext | None:
     if not chunks:
         return None
-    source = chunks[0].source
-    if any(chunk.source != source for chunk in chunks):
+    source = chunks[0].source_file
+    if any(chunk.source_file != source for chunk in chunks):
         return None
-    source_path = Path(source)
+    source_path = Path(__file__).resolve().parents[2] / "uploads" / source
     if not source_path.exists():
         return None
     file_hash = _hash_file(source_path)
-    chunk_hashes = [_hash_text(chunk.text) for chunk in chunks]
+    chunk_hashes = [_hash_text(f"{chunk.id}:{chunk.page_num}:{chunk.text}") for chunk in chunks]
     cache_dir = _index_dir()
     cache_dir.mkdir(parents=True, exist_ok=True)
     chunk_list_hash = _hash_text("".join(chunk_hashes))

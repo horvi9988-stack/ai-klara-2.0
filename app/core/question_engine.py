@@ -267,11 +267,11 @@ def generate_question(
 
     # Build question text
     text = str(selected["text"]).format(topic=topic_text)
-    
-    # If sources available, retrieve relevant context and add context hint
+
+    # If sources available, retrieve relevant context and base the question on it
     if sources:
         query = f"{normalized_subject} {topic_text} {normalized_level}"
-        text = _attach_document_preview(text, sources, query, preview_len)
+        text = _attach_document_question(text, sources, query, preview_len)
     
     keywords = [str(keyword).format(topic=topic_text) for keyword in selected.get("keywords", [])]
     meta = QuestionMeta(
@@ -473,6 +473,27 @@ def generate_lesson_from_sources(
     return combined
 
 
+def _attach_document_question(
+    question: str,
+    sources: list[SourceChunk],
+    query: str,
+    preview_len: int,
+) -> str:
+    if not sources:
+        return question
+    from app.core.local_sources import retrieve_chunks
+
+    retrieved = retrieve_chunks(sources, query, limit=1)
+    if not retrieved:
+        return question
+    chunk = retrieved[0]
+    preview = _clip_text(chunk.text, preview_len)
+    if not preview:
+        return question
+    citation = _format_citation(chunk)
+    return f"Na zaklade zdroje vysvetli: \"{preview}\"\n{citation}"
+
+
 def _attach_document_preview(
     question: str,
     sources: list[SourceChunk],
@@ -486,10 +507,17 @@ def _attach_document_preview(
     retrieved = retrieve_chunks(sources, query, limit=1)
     if not retrieved:
         return question
-    preview = _clip_text(retrieved[0].text, preview_len)
+    chunk = retrieved[0]
+    preview = _clip_text(chunk.text, preview_len)
     if not preview:
         return question
-    return f"{question}\n[From document: {preview}]"
+    citation = _format_citation(chunk)
+    return f"{question}\n[From document: {preview}]\n{citation}"
+
+
+def _format_citation(chunk: SourceChunk) -> str:
+    page_label = f"p.{chunk.page_num}"
+    return f"[Source: {chunk.source_file} {page_label}]"
 
 
 def _clip_text(text: str, limit: int) -> str:

@@ -90,10 +90,16 @@ def _attach_document_preview(
 ) -> str:
     if not retrieved:
         return question
-    preview = _clip_text(retrieved[0].text, preview_len)
+    chunk = retrieved[0]
+    preview = _clip_text(chunk.text, preview_len)
     if not preview:
         return question
-    return f"{question}\n[From document: {preview}]"
+    citation = _format_citation(chunk)
+    return f"{question}\n[From document: {preview}]\n{citation}"
+
+
+def _format_citation(chunk: SourceChunk) -> str:
+    return f"[Source: {chunk.source_file} p.{chunk.page_num}]"
 
 
 def _clip_text(text: str, limit: int) -> str:
